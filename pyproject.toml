@@ -1,0 +1,35 @@
+[build-system]
+requires = ["setuptools>=61.0", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "foolgit"
+version = "1.0.0"
+description = "A minimalist, foolproof, and customizable Git assistant with CLI & PyQt6 Dark GUI."
+readme = "README.md"
+requires-python = ">=3.8"
+license = { text = "MIT" }
+authors = [
+    { name = "FoolGit Team" }
+]
+keywords = ["git", "cli", "gui", "pyqt6", "developer-tools", "productivity"]
+classifiers = [
+    "Programming Language :: Python :: 3",
+    "Operating System :: MacOS",
+    "Operating System :: POSIX :: Linux",
+    "Operating System :: Microsoft :: Windows",
+    "Environment :: Console",
+    "Environment :: MacOS X",
+    "Topic :: Software Development :: Version Control :: Git",
+]
+dependencies = []
+
+[project.optional-dependencies]
+gui = ["PyQt6>=6.4.0"]
+
+[project.scripts]
+foolgit = "foolgit_pkg.cli_entry:main"
+foolgit-gui = "foolgit_pkg.gui:launch_gui"
+
+[tool.setuptools.packages.find]
+include = ["foolgit_pkg*"]

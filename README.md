@@ -1,71 +1,232 @@
-# 💡 FoolGit (Simple & Foolproof Git Assistant / 傻瓜式定制 Git 助理)
+# 💡 FoolGit
 
-> **极简、防呆、纯选择题交互。** 专为日常高频 Git 操作定制，告别繁琐冗长指令与臃肿 GUI 软件。
-> **Modern Programmer Dark/Gray Theme, PyQt6 & Terminal CLI, Pure English / Pure Chinese.**
+[English Documentation](README.md) | [简体中文说明](README_zh.md)
 
----
-
-## 🌟 设计哲学 (Philosophy)
-
-对于绝大多数日常开发者和初学者来说：
-1. **默认出厂极简**：日常 90% 的场景无非是「一键同步保存」、「拉取更新」、「看改动」、「撤销误改」和「切分支」。出厂只展示最核心的 6 个原子操作。
-2. **纯净多语言 (Zero Mixed Language)**：出厂默认英文（English），支持切换为简体中文（Chinese）。**英文模式下 100% 纯英文，中文模式下 100% 纯中文，严禁中英混杂**。语言偏好自动持久化保存。
-3. **现代程序员暗色质感 (Dark/Gray Modern Aesthetic)**：
-   - GUI 基于 **PyQt6** 打造，采用深灰黑客科技风（Charcoal `#121316` + Card `#1C1D21` + 翡翠绿高亮）。
-   - 告别传统臃肿的拓扑树状图，打造如 Raycast / Linear / VS Code 般精致的轻量操作面板。
-4. **扩展自由自选**：在「功能库」中一键勾选追加（如查看历史、Diff、清理垃圾文件、Release标签），或者添加专属自定义 Git 命令。
+> **Simple, Foolproof, and Customizable Git Assistant with CLI & Modern Dark PyQt6 Desktop GUI.**  
+> Designed for everyday developers and beginners who only need core Git commands without memorizing obscure flags or dealing with bloated GUI tools.
 
 ---
 
-## 🚀 快速上手 (Quick Start)
+## 🌟 Why FoolGit? (Design Philosophy)
 
-### 1. 运行 GUI 现代化桌面版 (PyQt6)
-```bash
-# 直接运行 GUI
-./foolgit-gui
+Most developers use only a small subset of Git commands daily: saving work, pulling updates, checking status, undoing mistakes, and switching branches. Traditional tools present two extremes:
+- **Git CLI**: Steep learning curve, dozens of obscure flags, and cryptic error messages.
+- **Heavy GUI Clients** (Sourcetree, GitKraken, etc.): Overcomplicated commit graph trees, heavy memory usage, and confusing terminology.
 
-# 或者通过 foolgit 参数启动
-./foolgit --gui
+**FoolGit provides a clean third way:**
+1. **Out-of-the-Box Simplicity**: Defaults strictly to the **6 core everyday actions**. Zero config required.
+2. **Pure Multi-Language (Zero Mixed Language)**: Default **English** with optional **Simplified Chinese**. 100% pure text in both modes with zero awkward mixed phrases.
+3. **Programmer Dark/Gray Aesthetic**: Modern PyQt6 GUI crafted with a dark charcoal aesthetic (`#121316`), responsive cards, and an integrated real-time hacker terminal console.
+4. **Choice-Driven Interaction**: Number keys or one-click buttons instead of long typing.
+5. **Extensible on Demand**: Enable extra built-in features (history, diff, tag, clean, multi-repo sync) or add your own custom Git commands with a single click.
+
+---
+
+## 📸 Overview & Interface
+
+### PyQt6 Desktop GUI (Programmer Dark/Gray Theme)
 ```
-> 点击右上角 `Language` 按钮即可即时在英文与中文之间无感热切换。
-
-### 2. 运行 CLI 终端版
-```bash
-./foolgit
+┌─────────────────────────────────────────────────────────┐
+│ ⚡ FoolGit   v1.0.0                  [Language: English]│
+│ 📁 my-project               [main ▾] [+]                │
+│ [✨ Clean, nothing to commit]                           │
+├─────────────────────────────────────────────────────────┤
+│ One-Click Sync & Save                                   │
+│ Automatically pulls remote ➔ commits ➔ pushes           │
+│ [ Commit message (leave blank for auto timestamp)...  ] │
+│ [              🚀  One-Click Sync                     ] │
+├─────────────────────────────────────────────────────────┤
+│ QUICK ACTIONS                                           │
+│ [ ⬇️ Pull Latest Code  ]    [ 🔍 View Changes & Status ]│
+│ [ 💊 Undo / Discard    ]    [ 📦 Stash / Restore Edits ]│
+├─────────────────────────────────────────────────────────┤
+│ [ 📜 History ]   [ 🔍 Diff ]             [ ⚙️ Settings ] │
+├─────────────────────────────────────────────────────────┤
+│ > FoolGit Ready. Click 'One-Click Sync' to commit & push│
+└─────────────────────────────────────────────────────────┘
 ```
 
-### 3. 配置全局快捷命令 (推荐)
+### Interactive Terminal CLI
+```text
+┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃  FoolGit v1.0.0 ── Simple & Foolproof Git Assistant        ┃
+┃  📁 Repo: my-project   🌿 Branch: main                     ┃
+┃  ⚡ Status: ✎ 2 file(s) changed (Synced with remote ✓)     ┃
+┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛
+
+ [1] One-Click Sync [Recommended]
+     Auto pull ➔ record changes ➔ commit ➔ push to remote
+ [2] Pull Latest Code [Common]
+     Safely fetch and merge latest remote updates
+ [3] View Changes & Status [Status]
+     Overview of changed files, staged files and sync status
+ [4] Undo / Discard Changes [Safety]
+     Discard unwanted edits or undo the last commit
+ [5] Switch or Create Branch [Branch]
+     Switch branch by number or create a new branch
+ [6] Stash / Restore Edits [Stash]
+     Temporarily stash unfinished work and restore anytime
+
+ ----------------------------------------------------
+ [+] FoolGit Settings & Feature Store
+ [q] Quit
+
+👉 Please select an option [Default: 1, q: Quit]: 
+```
+
+---
+
+## ⚡ Core Feature Matrix
+
+| # | Action | Purpose & Underlying Pipeline |
+| :---: | :--- | :--- |
+| **`[1]`** | **One-Click Sync** *(Recommended)* | Safely pulls remote updates ➔ stages all (`add -A`) ➔ commits (with optional or auto-timestamped message) ➔ pushes to remote. |
+| **`[2]`** | **Pull Latest Code** | Fetches and safely merges remote tracking branch; gives clear conflict diagnosis. |
+| **`[3]`** | **View Changes & Status** | Color-coded status of staged, modified, and untracked files + line change stats. |
+| **`[4]`** | **Undo / Discard Changes** | 3-level safety net: ① Discard ALL uncommitted edits, ② Undo last commit (keep edited code in workspace), ③ Discard a single file. |
+| **`[5]`** | **Switch or Create Branch** | Numbered picklist to switch local branches or press `n` to create a new branch. |
+| **`[6]`** | **Stash / Restore Edits** | Temporarily packages work-in-progress to clean the working tree, and pops it back anytime. |
+
+### Feature Store & Custom Shortcuts (Accessible via `[+]` or `Settings`)
+- **Recent Commit History**: Clean oneline commit timeline with author and relative time.
+- **Code Differences (Diff)**: Line-by-line inspection of unstaged/staged edits.
+- **Clean Untracked Files**: Removes untracked build artifacts and temporary files.
+- **Release Tag Management**: Create release tags (e.g. `v1.0.0`) and optionally push to remote.
+- **Remote Configuration**: Inspect remote `origin` URLs.
+- **Multi-Repository Batch Sync**: Automatically scan subdirectories for Git repositories and sync them all in batch (evolved from `gsyn`).
+- **User Custom Commands**: Define any arbitrary Git command (e.g. `git push origin --tags`) to show up on the main menu.
+
+---
+
+## 🚀 Deployment & Installation
+
+### Option 1: Automated Installer (macOS & Linux - Recommended)
+Run the automated installation script inside the project folder:
 ```bash
-# 终端版命令 (输入 foolgit 即可使用)
+./install.sh
+```
+This script will:
+- Verify Python 3 and Git environment.
+- Symlink `foolgit` (CLI) and `foolgit-gui` (PyQt6 Desktop GUI) globally to `/usr/local/bin` (or `~/.local/bin`).
+- On macOS: Automatically generate `FoolGit.app` in `~/Applications` so you can launch it instantly via **Spotlight**, **Raycast**, or **Launchpad**!
+
+To uninstall:
+```bash
+./uninstall.sh
+```
+
+---
+
+### Option 2: Python `pip` Package Installation
+Install directly as a standard Python package:
+```bash
+# Install core CLI
+pip install -e .
+
+# Install with PyQt6 GUI support
+pip install -e ".[gui]"
+```
+Once installed, `foolgit` and `foolgit-gui` are available globally in your terminal.
+
+---
+
+### Option 3: Manual Symlinks
+```bash
 sudo ln -sf $(pwd)/foolgit /usr/local/bin/foolgit
-
-# 桌面 GUI 命令 (输入 foolgit-gui 即可弹出窗口)
 sudo ln -sf $(pwd)/foolgit-gui /usr/local/bin/foolgit-gui
 ```
 
 ---
 
-## 🎨 界面视觉与功能区
+## 🛠️ Compilation & Packaging (Standalone Binaries)
 
-- **顶部状态卡片 (Header)**：当前仓库名称、分支秒切下拉菜单（支持 `+` 一键新建分支）、状态指示胶囊（干净 / 有修改 / 超前落后指示）、右上角语言切换。
-- **核心大动作 (Hero Section)**：**`🚀 One-Click Sync`**，支持可选填写提交信息（留空自动带时间记录），一键完成 `Pull ➔ Add ➔ Commit ➔ Push`。
-- **日常快捷操作 (Quick Actions)**：
-  - `⬇️ Pull Latest`（一键拉取最新代码）
-  - `🔍 View Changes`（查看代码改动详情）
-  - `💊 Undo / Discard`（后悔药：放弃未提交修改 / 撤回上次 commit）
-  - `📦 Stash / Restore`（暂存未完成代码 / 一键恢复）
-- **工具与设置 (Tools & Settings)**：
-  - `📜 History`（最近 10 次提交流水线）
-  - `🔍 Diff`（代码行级增删高亮对比）
-  - `⚙️ Settings`（功能库勾选开关与自定义 Git 命令管理）
-- **极简深色控制台 (Terminal Console)**：实时展示 Git 步骤与反馈，异步非阻塞执行，界面丝滑流畅。
+FoolGit provides dedicated scripts to compile standalone, self-contained executables and application bundles without requiring users to install Python or PyQt6 manually.
+
+### 🍎 1. macOS Build Guide (CLI, App Bundle & DMG)
+
+Prerequisites:
+```bash
+pip install pyinstaller PyQt6
+```
+
+Run the macOS build script:
+```bash
+./scripts/build_macos.sh
+# Or using the universal runner:
+python3 scripts/build.py --all
+```
+
+**Generated Artifacts in `dist/`**:
+1. **`dist/foolgit`**: Standalone single-binary executable for terminal.
+2. **`dist/FoolGit.app`**: Complete macOS Application bundle. Double-click to run or drag into `/Applications`.
+3. **`dist/FoolGit-1.0.0-macOS.dmg`**: Drag-and-drop macOS disk image installer.
 
 ---
 
-## 🌐 语言设置与配置持久化
+### 🐧 2. Linux Build Guide
+Run:
+```bash
+./scripts/build_linux.sh
+```
+**Generated Artifacts**:
+- `dist/foolgit` (Standalone CLI binary)
+- `dist/foolgit-gui` (Standalone GUI binary)
+- `dist/foolgit.desktop` (Application menu launcher)
 
-- **默认语言**：英文 (`en`)
-- **可选语言**：简体中文 (`zh`)
-- **CLI 切换**：在主菜单输入 `+` ➔ 选择 `[4] Interface Language` 即可切换。
-- **GUI 切换**：点击右上角语言按钮一键即时切换。
-- 配置文件持久化保存在 `~/.foolgit/config.json`（若不可写会自动安全降级）。
+---
+
+### 🪟 3. Windows Build Guide
+Run in Command Prompt:
+```cmd
+scripts\build_windows.bat
+```
+**Generated Artifacts**:
+- `dist\foolgit.exe` (CLI executable)
+- `dist\foolgit-gui.exe` (Windowed GUI executable)
+
+---
+
+## 🌐 Language & Configuration Persistence
+
+- **Default Language**: English (`en`)
+- **Optional Language**: Simplified Chinese (`zh`)
+- **How to Switch**:
+  - **In CLI**: Press `+` ➔ Select `[4] Interface Language` to switch.
+  - **In GUI**: Click the `Language` button in the top-right corner for live hot-reloading.
+- **Configuration Storage**: Preferences are persisted in `~/.foolgit/config.json` (with automatic fallback to local directory if permissions are restricted).
+
+---
+
+## 📂 Project Structure
+
+```text
+FoolGit/
+├── foolgit                 # Terminal CLI launcher script
+├── foolgit-gui             # PyQt6 Desktop GUI launcher script
+├── setup.py                # Standard setuptools configuration
+├── pyproject.toml          # PEP 518 / 621 packaging metadata
+├── install.sh              # One-click installer for macOS / Linux
+├── uninstall.sh            # Uninstaller script
+├── foolgit_pkg/
+│   ├── __init__.py         # Package version and metadata
+│   ├── cli_entry.py        # Central CLI entry dispatcher
+│   ├── core.py             # Git core engine (CLI & GUI shared)
+│   ├── config.py           # Configuration & language persistence
+│   ├── i18n.py             # Pure multi-language localization engine
+│   ├── presets.py          # Built-in feature library & metadata
+│   ├── cli.py              # Minimalist interactive terminal UI
+│   └── gui.py              # PyQt6 Modern Dark/Gray desktop UI
+├── scripts/
+│   ├── build.py            # Universal cross-platform build orchestrator
+│   ├── build_macos.sh      # macOS compilation script (CLI, .app, .dmg)
+│   ├── build_linux.sh      # Linux compilation script
+│   └── build_windows.bat   # Windows compilation script
+├── README.md               # English documentation
+└── README_zh.md            # Simplified Chinese documentation
+```
+
+---
+
+## 📄 License
+
+MIT License. Free and open source.
