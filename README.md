@@ -1,7 +1,7 @@
 # 💡 FoolGit (Simple & Foolproof Git Assistant / 傻瓜式定制 Git 助理)
 
 > **极简、防呆、纯选择题交互。** 专为日常高频 Git 操作定制，告别繁琐冗长指令与臃肿 GUI 软件。
-> **Zero Dependencies, Ultra-Lightweight, English & Chinese Supported.**
+> **Modern Programmer Dark/Gray Theme, PyQt6 & Terminal CLI, Pure English / Pure Chinese.**
 
 ---
 
@@ -9,106 +9,63 @@
 
 对于绝大多数日常开发者和初学者来说：
 1. **默认出厂极简**：日常 90% 的场景无非是「一键同步保存」、「拉取更新」、「看改动」、「撤销误改」和「切分支」。出厂只展示最核心的 6 个原子操作。
-2. **多语言原生支持**：出厂默认英文（English），随时可一键切换为中文（简体中文），配置持久化保存。
-3. **拒绝长指令输入**：像选择题一样，按数字或回车即可完成安全操作流程。
-4. **扩展自由自选**：想用高级功能？在「功能库」中一键勾选追加（如查看历史、Diff、清理垃圾文件、Release标签），或者添加专属自定义 Git 命令。
-5. **双模交互 (CLI + GUI)**：
-   - **CLI 终端版**：秒级交互，终端内按数字/回车秒跑。
-   - **GUI 桌面版**：拒绝臃肿复杂的 Git 树，做成如同系统小挂件般的卡片式控制台，大按钮一键直选。
+2. **纯净多语言 (Zero Mixed Language)**：出厂默认英文（English），支持切换为简体中文（Chinese）。**英文模式下 100% 纯英文，中文模式下 100% 纯中文，严禁中英混杂**。语言偏好自动持久化保存。
+3. **现代程序员暗色质感 (Dark/Gray Modern Aesthetic)**：
+   - GUI 基于 **PyQt6** 打造，采用深灰黑客科技风（Charcoal `#121316` + Card `#1C1D21` + 翡翠绿高亮）。
+   - 告别传统臃肿的拓扑树状图，打造如 Raycast / Linear / VS Code 般精致的轻量操作面板。
+4. **扩展自由自选**：在「功能库」中一键勾选追加（如查看历史、Diff、清理垃圾文件、Release标签），或者添加专属自定义 Git 命令。
 
 ---
 
 ## 🚀 快速上手 (Quick Start)
 
-FoolGit **完全基于 Python 3 原生标准库构建，零外部依赖（无需 pip install 任何库）**，在任意 macOS / Linux / Windows 环境开箱即用。
-
-### 1. 运行 CLI 交互终端版
+### 1. 运行 GUI 现代化桌面版 (PyQt6)
 ```bash
-# 在当前仓库目录下运行
-./foolgit
-
-# 或指定仓库路径
-./foolgit ~/projects/my-app
-```
-
-### 2. 运行 GUI 极简桌面版
-```bash
-# 方式一：使用 GUI 独立脚本
+# 直接运行 GUI
 ./foolgit-gui
 
-# 方式二：使用参数启动
+# 或者通过 foolgit 参数启动
 ./foolgit --gui
+```
+> 点击右上角 `Language` 按钮即可即时在英文与中文之间无感热切换。
+
+### 2. 运行 CLI 终端版
+```bash
+./foolgit
 ```
 
 ### 3. 配置全局快捷命令 (推荐)
 ```bash
-# 终端版
+# 终端版命令 (输入 foolgit 即可使用)
 sudo ln -sf $(pwd)/foolgit /usr/local/bin/foolgit
 
-# 桌面 GUI 版
+# 桌面 GUI 命令 (输入 foolgit-gui 即可弹出窗口)
 sudo ln -sf $(pwd)/foolgit-gui /usr/local/bin/foolgit-gui
 ```
 
 ---
 
-## 🌐 多语言支持 (Language Settings)
+## 🎨 界面视觉与功能区
+
+- **顶部状态卡片 (Header)**：当前仓库名称、分支秒切下拉菜单（支持 `+` 一键新建分支）、状态指示胶囊（干净 / 有修改 / 超前落后指示）、右上角语言切换。
+- **核心大动作 (Hero Section)**：**`🚀 One-Click Sync`**，支持可选填写提交信息（留空自动带时间记录），一键完成 `Pull ➔ Add ➔ Commit ➔ Push`。
+- **日常快捷操作 (Quick Actions)**：
+  - `⬇️ Pull Latest`（一键拉取最新代码）
+  - `🔍 View Changes`（查看代码改动详情）
+  - `💊 Undo / Discard`（后悔药：放弃未提交修改 / 撤回上次 commit）
+  - `📦 Stash / Restore`（暂存未完成代码 / 一键恢复）
+- **工具与设置 (Tools & Settings)**：
+  - `📜 History`（最近 10 次提交流水线）
+  - `🔍 Diff`（代码行级增删高亮对比）
+  - `⚙️ Settings`（功能库勾选开关与自定义 Git 命令管理）
+- **极简深色控制台 (Terminal Console)**：实时展示 Git 步骤与反馈，异步非阻塞执行，界面丝滑流畅。
+
+---
+
+## 🌐 语言设置与配置持久化
 
 - **默认语言**：英文 (`en`)
 - **可选语言**：简体中文 (`zh`)
-- **CLI 切换**：在主菜单输入 `+` ➔ 选择 `[4] 🌐 Switch Language / 切换语言` 即可快速切换。
-- **GUI 切换**：点击窗口右上角 `🌐 语言` 按钮，界面文字立即无感热切换！
+- **CLI 切换**：在主菜单输入 `+` ➔ 选择 `[4] Interface Language` 即可切换。
+- **GUI 切换**：点击右上角语言按钮一键即时切换。
 - 配置文件持久化保存在 `~/.foolgit/config.json`（若不可写会自动安全降级）。
-
----
-
-## 📋 功能全景
-
-### 1. 出厂核心功能（默认开启）
-
-| 编号 | 功能 (EN / ZH) | 适用场景 | 底层组合逻辑 |
-| :---: | :--- | :--- | :--- |
-| **`[1]`** | **One-Click Sync / 一键保存并同步** *(推荐)* | 随手存盘、下班提交 | 自动拉取 ➔ 记录改动 (add -A) ➔ 提交版本 ➔ 推送远端 |
-| **`[2]`** | **Pull Latest / 一键拉取最新代码** | 上班前同步同事改动 | 安全检测 ➔ 拉取远程分支 ➔ 智能冲突提醒 |
-| **`[3]`** | **View Changes / 查看代码改动详情** | 查看本地改动了什么 | 清晰展示已暂存/未暂存/未跟踪文件与代码增删行数 |
-| **`[4]`** | **Undo / 后悔药 / 撤销改动** | 写乱了想恢复干净状态 | ① 放弃所有未提交修改 ② 撤回上次 commit (保留代码) ③ 放弃单文件修改 |
-| **`[5]`** | **Branch / 切换或新建分支** | 换个分支开发或切新特性 | 列出所有本地分支按数字秒切，或按 `n` 快速输入新名称创建 |
-| **`[6]`** | **Stash / 暂存保存 / 恢复改动** | 临时存盘、避免拉取冲突 | 一键暂存打包 (stash) ➔ 随时一键弹出取回 (pop) |
-
----
-
-### 2. 备选功能库（进入 `[+]` 设置随时一键勾选启用）
-
-- **View Recent History / 查看简明提交历史**：按时间倒序列出最近 10 次提交、作者与相对时间。
-- **View Diff / 查看具体代码差异**：逐行高亮展示工作区修改内容。
-- **Clean Untracked / 清理未跟踪垃圾文件**：一键清理本地新建但未追踪的临时杂质文件与空目录。
-- **Release Tag / 版本标签**：给当前版本打上 Release 标签并可一键同步推送到远端。
-- **Remote / 查看远程仓库地址**：快速检查当前仓库关联的 origin 远端地址。
-- **Multi-Repo Sync / 多仓库批量巡检与同步**：继承 `gsyn` 核心能力，扫描子目录下所有 Git 项目并进行批量同步。
-
----
-
-### 3. 自定义专属命令（Custom Commands）
-
-在主菜单按 `[+]` 进入个性化设置，可随意添加你团队或个人专属的命令，例如：
-- 显示名称：`Push All Tags`
-- 执行命令：`git push origin --tags`
-添加后直接作为独立序号项挂载在主菜单，一键执行。
-
----
-
-## 🏗️ 架构说明
-
-```
-FoolGit/
-├── foolgit                 # CLI 交互入口
-├── foolgit-gui             # GUI 桌面版入口
-├── foolgit_pkg/
-│   ├── core.py             # Git 底层执行、组合命令、防呆错误翻译 (CLI/GUI 共用)
-│   ├── config.py           # 配置与持久化管理 (~/.foolgit/config.json)
-│   ├── i18n.py             # 多语言国际化系统 (默认 en，支持 zh)
-│   ├── presets.py          # 预设功能库元数据 (动态本地化)
-│   ├── cli.py              # 极简终端交互 UI
-│   └── gui.py              # 极简桌面图形交互 UI (基于 Tkinter，轻量原生秒开)
-├── README.md               # 完整中文使用指南
-└── gsyn                    # 原版参考脚本
-```

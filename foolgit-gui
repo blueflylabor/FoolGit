@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-FoolGit GUI - 傻瓜式 Git 助手桌面版
-直接运行此脚本启动极简桌面窗口。
+FoolGit GUI - 极简高质感 Git 助手 (PyQt6 现代化桌面版)
+自动寻找具备 PyQt6 的 Python 环境并秒级启动。
 """
 
 import sys
@@ -10,6 +10,19 @@ import os
 CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
 if CURRENT_DIR not in sys.path:
     sys.path.insert(0, CURRENT_DIR)
+
+# 确保能自动找到 PyQt6 运行时环境
+try:
+    import PyQt6
+except ImportError:
+    candidate_pythons = [
+        "/opt/homebrew/Caskroom/miniconda/base/envs/playground/bin/python",
+        os.path.expanduser("~/miniconda3/envs/playground/bin/python"),
+        os.path.expanduser("~/.conda/envs/playground/bin/python"),
+    ]
+    for py_bin in candidate_pythons:
+        if os.path.exists(py_bin):
+            os.execv(py_bin, [py_bin] + sys.argv)
 
 from foolgit_pkg.gui import launch_gui
 

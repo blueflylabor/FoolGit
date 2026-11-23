@@ -1,6 +1,6 @@
 """
 FoolGit 终端交互 UI (CLI)
-支持多语言 (默认英文 en，可选中文 zh) 与个性化设置持久化。
+纯净多语言支持：英文模式 100% 英文，中文模式 100% 中文，杜绝中英文混杂。
 """
 
 import os
@@ -13,7 +13,7 @@ from .config import ConfigManager
 from .presets import get_preset_info, ALL_PRESET_IDS
 from .i18n import t, get_language
 
-# 终端 ANSI 颜色常量 (轻量跨平台)
+# 终端 ANSI 颜色常量
 RESET = "\033[0m"
 BOLD = "\033[1m"
 DIM = "\033[2m"
@@ -59,7 +59,7 @@ class FoolGitCLI:
             sys.exit(0)
 
     # ─────────────────────────────────────────────────────────
-    # 单仓库主界面与流程
+    # 单仓库主界面
     # ─────────────────────────────────────────────────────────
 
     def _render_header(self, info: Dict[str, Any]):
@@ -100,12 +100,10 @@ class FoolGitCLI:
 
             self._render_header(info)
 
-            # 获取当前开启的菜单列表
             active_ids = self.config_mgr.get_active_preset_ids()
             custom_cmds = self.config_mgr.get_custom_commands()
 
             menu_items = []
-            # 1. 预设功能 (动态本地化)
             for pid in active_ids:
                 if pid in ALL_PRESET_IDS:
                     meta = get_preset_info(pid)
@@ -117,18 +115,16 @@ class FoolGitCLI:
                         "desc": meta["short_desc"],
                     })
 
-            # 2. 自定义命令
             for c_cmd in custom_cmds:
                 menu_items.append({
                     "type": "custom",
                     "id": c_cmd["id"],
                     "name": c_cmd["name"],
-                    "tag": "Custom" if get_language() == "en" else "自定",
+                    "tag": t("custom_tag"),
                     "desc": c_cmd["desc"],
                     "raw_cmd": c_cmd["cmd"],
                 })
 
-            # 打印菜单
             for idx, item in enumerate(menu_items, start=1):
                 tag_str = f" {c('[' + item['tag'] + ']', MAGENTA)}" if item.get("tag") else ""
                 highlight = c(f"[{idx}]", BOLD + GREEN if idx == 1 else BOLD + CYAN)
@@ -137,10 +133,9 @@ class FoolGitCLI:
 
             print(f"\n {c('----------------------------------------------------', GRAY)}")
             print(f" {c('[+]', BOLD + YELLOW)} {BOLD}{t('settings_title')}{RESET}")
-            print(f" {c('[q]', BOLD + RED)} {BOLD}Quit / 退出{RESET}")
+            print(f" {c('[q]', BOLD + RED)} {BOLD}{t('menu_quit')}{RESET}")
             print()
 
-            # 用户输入
             choice = input(f"{BOLD}{t('prompt_choice')}{RESET}").strip()
 
             if choice.lower() in ["q", "quit", "exit"]:
@@ -174,16 +169,16 @@ class FoolGitCLI:
         print()
         if itype == "custom":
             raw_cmd = item["raw_cmd"]
-            print(c(f"🚀 Running custom command: {raw_cmd}", BOLD + CYAN))
+            print(c(f"🚀 Running: {raw_cmd}", BOLD + CYAN))
             res = run_git(raw_cmd.replace("git ", "").split(), cwd=engine.repo_path)
             if res.stdout:
                 print(res.stdout)
             if res.stderr:
                 print(c(res.stderr, YELLOW if res.success else RED))
             if res.success:
-                print(c("✅ Completed!", GREEN))
+                print(c("✅ OK", GREEN))
             else:
-                print(c("❌ Command failed.", RED))
+                print(c("❌ Failed", RED))
             prompt_press_enter()
             return
 
@@ -216,15 +211,15 @@ class FoolGitCLI:
             prompt_press_enter()
 
     # ─────────────────────────────────────────────────────────
-    # 核心动作实现 (本地化)
+    # 核心动作
     # ─────────────────────────────────────────────────────────
 
     def _action_sync(self, engine: GitEngine):
         """一键保存并同步"""
         print(c("══════════════════════════════════════════", CYAN))
-        print(c(f"  {t('sync_banner')}", BOLD + GREEN))
+        print(c(f"  🚀 {t('sync_banner')}", BOLD + GREEN))
         print(c("══════════════════════════════════════════", CYAN))
-        print(t("sync_tip"))
+        print(f"💡 {t('sync_tip')}")
 
         custom_msg = input(f"{BOLD}{t('commit_prompt')}{RESET}").strip()
 
@@ -245,8 +240,8 @@ class FoolGitCLI:
         prompt_press_enter()
 
     def _action_pull(self, engine: GitEngine):
-        """一键拉取最新代码"""
-        print(c(t("pulling"), BOLD + CYAN))
+        """拉取最新代码"""
+        print(c(f"⬇️  {t('pulling')}", BOLD + CYAN))
         ok, msg = engine.safe_pull()
         print()
         if ok:
@@ -258,39 +253,39 @@ class FoolGitCLI:
     def _action_status(self, engine: GitEngine):
         """查看改动详情"""
         info = engine.get_info()
-        print(c(t("status_title"), BOLD + CYAN))
+        print(c(f"🔍 {t('status_title')}", BOLD + CYAN))
         print(t("work_dir", path=c(info['path'], DIM)))
         print()
 
         if info["is_clean"]:
-            print(c(t("clean_workspace"), GREEN))
+            print(c(f"✨ {t('clean_workspace')}", GREEN))
         else:
             if info["staged"]:
-                print(c(t("staged_files"), GREEN))
+                print(c(f"● {t('staged_files')}", GREEN))
                 for f in info["staged"]:
                     print(f"  {c('+', GREEN)} {f}")
             if info["modified"]:
-                print(c(t("modified_files"), YELLOW))
+                print(c(f"● {t('modified_files')}", YELLOW))
                 for f in info["modified"]:
                     print(f"  {c('M', YELLOW)} {f}")
             if info["untracked"]:
-                print(c(t("untracked_files"), CYAN))
+                print(c(f"● {t('untracked_files')}", CYAN))
                 for f in info["untracked"]:
                     print(f"  {c('?', CYAN)} {f}")
 
         stat = engine.get_diff_stat()
         if stat:
-            print(f"\n{c(t('diff_stat_title'), BOLD)}")
+            print(f"\n{c('● ' + t('diff_stat_title'), BOLD)}")
             print(stat)
 
         prompt_press_enter()
 
     def _action_undo(self, engine: GitEngine):
         """后悔药子菜单"""
-        print(c(t("undo_title"), BOLD + MAGENTA))
-        print(t("undo_opt_all"))
-        print(t("undo_opt_commit"))
-        print(t("undo_opt_file"))
+        print(c(f"💊 {t('undo_title')}", BOLD + MAGENTA))
+        print(f" [1] {t('undo_opt_all')}")
+        print(f" [2] {t('undo_opt_commit')}")
+        print(f" [3] {t('undo_opt_file')}")
         print(f" {t('back_to_main')}")
         print()
 
@@ -306,16 +301,16 @@ class FoolGitCLI:
             ok, msg = engine.undo_action("uncommit")
             print(c(msg, GREEN if ok else RED))
         elif sub == "3":
-            fname = input(t("target_file_prompt")).strip()
+            fname = input(t("discard_file_prompt")).strip()
             if fname:
                 ok, msg = engine.undo_action("discard_file", target=fname)
                 print(c(msg, GREEN if ok else RED))
         prompt_press_enter()
 
     def _action_branch(self, engine: GitEngine):
-        """分支管理子菜单"""
+        """分支管理"""
         branches = engine.list_branches()
-        print(c(t("branch_title"), BOLD + CYAN))
+        print(c(f"🌿 {t('branch_title')}", BOLD + CYAN))
         print(t("local_branches"))
         for idx, b in enumerate(branches, start=1):
             curr_mark = c(f" {t('current_branch_mark')}", GREEN) if b["is_current"] else ""
@@ -345,10 +340,10 @@ class FoolGitCLI:
         prompt_press_enter()
 
     def _action_stash(self, engine: GitEngine):
-        """暂存管理子菜单"""
-        print(c(t("stash_title"), BOLD + CYAN))
-        print(t("stash_opt_save"))
-        print(t("stash_opt_pop"))
+        """暂存管理"""
+        print(c(f"📦 {t('stash_title')}", BOLD + CYAN))
+        print(f" [1] {t('stash_opt_save')}")
+        print(f" [2] {t('stash_opt_pop')}")
         print(f" {t('back_to_main')}")
         print()
 
@@ -365,7 +360,7 @@ class FoolGitCLI:
     def _action_history(self, engine: GitEngine):
         """提交历史"""
         hist = engine.get_recent_history(10)
-        print(c(t("history_title"), BOLD + CYAN))
+        print(c(f"📜 {t('history_title')}", BOLD + CYAN))
         if not hist:
             print(t("no_history"))
         else:
@@ -380,7 +375,7 @@ class FoolGitCLI:
 
     def _action_diff(self, engine: GitEngine):
         """代码差异"""
-        print(c(t("diff_title"), BOLD + CYAN))
+        print(c(f"🔍 {t('diff_title')}", BOLD + CYAN))
         res = run_git(["diff", "--color=always"], cwd=engine.repo_path)
         if res.stdout:
             print(res.stdout)
@@ -394,9 +389,9 @@ class FoolGitCLI:
         if confirm == "y":
             res = run_git(["clean", "-fd"], cwd=engine.repo_path)
             if res.success:
-                print(c("✅ Cleaned untracked files successfully!", GREEN))
+                print(c(f"✅ {t('clean_success')}", GREEN))
             else:
-                print(c(f"❌ Clean failed: {res.stderr}", RED))
+                print(c(f"❌ {res.stderr}", RED))
         prompt_press_enter()
 
     def _action_tag(self, engine: GitEngine):
@@ -407,26 +402,26 @@ class FoolGitCLI:
         tag_msg = input(t("tag_msg_prompt")).strip() or tag_name
         res = run_git(["tag", "-a", tag_name, "-m", tag_msg], cwd=engine.repo_path)
         if res.success:
-            print(c(f"✅ Created local tag [{tag_name}]!", GREEN))
+            print(c(f"✅ {t('tag_created', tag=tag_name)}", GREEN))
             push_yn = input(t("tag_push_prompt")).strip().lower()
             if push_yn != "n":
                 pres = run_git(["push", "origin", tag_name], cwd=engine.repo_path)
                 if pres.success:
-                    print(c(f"🎉 Tag [{tag_name}] pushed to remote successfully!", GREEN))
+                    print(c(f"🎉 {t('tag_pushed', tag=tag_name)}", GREEN))
                 else:
-                    print(c(f"⚠️ Tag created locally, but failed to push: {pres.stderr}", YELLOW))
+                    print(c(f"⚠️ {pres.stderr}", YELLOW))
         else:
-            print(c(f"❌ Failed to create tag: {res.stderr}", RED))
+            print(c(f"❌ {res.stderr}", RED))
         prompt_press_enter()
 
     def _action_remote(self, engine: GitEngine):
         """查看远程仓库"""
         res = run_git(["remote", "-v"], cwd=engine.repo_path)
-        print(c("🌐 Remote Repositories:", BOLD + CYAN))
+        print(c(f"🌐 {t('remote_title')}", BOLD + CYAN))
         if res.stdout:
             print(res.stdout)
         else:
-            print(c("No remote repository configured.", YELLOW))
+            print(c(t("remote_none"), YELLOW))
         prompt_press_enter()
 
     def _action_multi_sync(self):
@@ -434,21 +429,20 @@ class FoolGitCLI:
         self._handle_multi_repo_view()
 
     # ─────────────────────────────────────────────────────────
-    # 功能库管理与个性化设置菜单
+    # 设置菜单
     # ─────────────────────────────────────────────────────────
 
     def _menu_manage_features(self):
-        """设置与个性化主菜单"""
+        """设置主菜单"""
         while True:
             print()
             print(c("══════════════════════════════════════════", YELLOW))
-            print(c(f"  {t('settings_title')}", BOLD + YELLOW))
+            print(c(f"  🛠️  {t('settings_title')}", BOLD + YELLOW))
             print(c("══════════════════════════════════════════", YELLOW))
             print(f" {t('settings_opt_presets')}")
             print(f" {t('settings_opt_add_custom')}")
             print(f" {t('settings_opt_remove_custom')}")
-            curr_lang_name = "English" if get_language() == "en" else "简体中文"
-            print(f" [4] 🌐 Switch Language / 切换语言 (Current: {c(curr_lang_name, GREEN)})")
+            print(f" {t('settings_opt_lang')}")
             print(f" {t('settings_opt_reset')}")
             print(f" {t('back_to_main')}")
             print()
@@ -472,7 +466,7 @@ class FoolGitCLI:
                     prompt_press_enter()
 
     def _menu_switch_language(self):
-        """语言切换菜单"""
+        """语言切换"""
         print()
         print(c(t("lang_switch_title"), BOLD + CYAN))
         print(f"  {t('lang_opt_en')}")
@@ -480,17 +474,18 @@ class FoolGitCLI:
         print(f"  {t('back_to_main')}")
         print()
 
-        choice = input(f"{BOLD}Choose language [1/2, b to cancel]: {RESET}").strip()
+        prompt_str = "Choose language [1/2, b to cancel]: " if get_language() == "en" else "请选择语言 [1/2, b 返回]: "
+        choice = input(f"{BOLD}{prompt_str}{RESET}").strip()
         if choice == "1":
             self.config_mgr.set_language("en")
-            print(c(t("lang_changed", lang="English"), GREEN))
+            print(c(t("lang_changed"), GREEN))
         elif choice == "2":
             self.config_mgr.set_language("zh")
-            print(c(t("lang_changed", lang="简体中文"), GREEN))
+            print(c(t("lang_changed"), GREEN))
         prompt_press_enter()
 
     def _menu_toggle_presets(self):
-        """开启或关闭官方备选功能"""
+        """开关备选功能"""
         while True:
             active_ids = self.config_mgr.get_active_preset_ids()
 
@@ -551,7 +546,7 @@ class FoolGitCLI:
         print(c(t("remove_custom_title"), BOLD + RED))
         for idx, item in enumerate(cmds, start=1):
             print(f"  [{idx}] {item['name']} ({item['cmd']})")
-        choice = input(f"{BOLD}Select number [b to return]: {RESET}").strip()
+        choice = input(f"{BOLD}Number [b to return]: {RESET}").strip()
         if choice.isdigit():
             idx = int(choice)
             if 1 <= idx <= len(cmds):
@@ -563,11 +558,10 @@ class FoolGitCLI:
         prompt_press_enter()
 
     # ─────────────────────────────────────────────────────────
-    # 多仓库巡检与非 Git 目录引导 (继承 gsyn)
+    # 多仓库支持
     # ─────────────────────────────────────────────────────────
 
     def _handle_non_git_dir(self):
-        """非 Git 目录下的智能响应"""
         repos = scan_multi_repos(self.target_dir)
         if repos:
             print(c(t("non_git_sub_found", count=len(repos)), CYAN))
@@ -577,15 +571,15 @@ class FoolGitCLI:
             print(c("┃", YELLOW) + f"  {BOLD}{t('non_git_title')}{RESET}".ljust(66) + c("┃", YELLOW))
             print(c("┗" + "━" * 58 + "┛", YELLOW))
             print()
-            print(t("init_repo_opt"))
-            print(t("clone_repo_opt"))
-            print(f" [q] {t('goodbye')}")
+            print(f" {t('init_repo_opt')}")
+            print(f" {t('clone_repo_opt')}")
+            print(f" [q] {t('menu_quit')}")
             print()
             c_input = input(f"{BOLD}Select [1/2, q]: {RESET}").strip()
             if c_input == "1":
                 res = run_git(["init"], cwd=self.target_dir)
                 if res.success:
-                    print(c("🎉 Git repository initialized successfully!", GREEN))
+                    print(c("🎉 Init OK!", GREEN))
                     prompt_press_enter()
                     self._run_single_repo_menu()
                 else:
@@ -602,7 +596,6 @@ class FoolGitCLI:
                 prompt_press_enter()
 
     def _handle_multi_repo_view(self, repos: Optional[List[Dict[str, Any]]] = None):
-        """多仓库巡检与批量同步界面"""
         if repos is None:
             repos = scan_multi_repos(self.target_dir)
 
@@ -612,7 +605,7 @@ class FoolGitCLI:
             return
 
         print()
-        print(c(t("multi_repo_title", count=len(repos)), BOLD + CYAN))
+        print(c(f"════════ {t('multi_repo_title', count=len(repos))} ════════", BOLD + CYAN))
         for idx, r in enumerate(repos, start=1):
             st_text = c(t("sync_up_to_date"), GREEN) if r["is_clean"] and r["ahead"] == 0 else c(t("dirty_status", count=r["total_changes"]), YELLOW)
             ahead_str = f" ↑{r['ahead']}" if r["ahead"] > 0 else ""
@@ -626,10 +619,10 @@ class FoolGitCLI:
 
         choice = input(f"{BOLD}Select option: {RESET}").strip()
         if choice.lower() == "a":
-            print(c(f"\n🚀 Syncing {len(repos)} repositories in batch...", BOLD + CYAN))
+            print(c(f"\n🚀 {t('multi_syncing', count=len(repos))}", BOLD + CYAN))
             succ, fail = 0, 0
             for r in repos:
-                print(f"\n▸ Syncing repo: {BOLD}{r['name']}{RESET} ({r['path']})")
+                print(f"\n▸ Repo: {BOLD}{r['name']}{RESET}")
                 eng = GitEngine(r["path"])
                 ok, logs = eng.one_click_sync()
                 for l in logs:
@@ -638,7 +631,7 @@ class FoolGitCLI:
                     succ += 1
                 else:
                     fail += 1
-            print(c(f"\nBatch sync completed: {succ} succeeded, {fail} failed.", GREEN if fail == 0 else YELLOW))
+            print(c(f"\n{t('multi_sync_summary', succ=succ, fail=fail)}", GREEN if fail == 0 else YELLOW))
             prompt_press_enter()
         elif choice.isdigit():
             idx = int(choice)
@@ -646,5 +639,5 @@ class FoolGitCLI:
                 sub_cli = FoolGitCLI(target_dir=repos[idx - 1]["path"])
                 sub_cli._run_single_repo_menu()
             else:
-                print(c(t("out_of_range", choice=sub), RED))
+                print(c(t("out_of_range", choice=choice), RED))
                 prompt_press_enter()

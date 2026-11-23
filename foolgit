@@ -35,6 +35,17 @@ def main():
         sys.exit(0)
 
     if "-g" in sys.argv or "--gui" in sys.argv:
+        try:
+            import PyQt6
+        except ImportError:
+            candidate_pythons = [
+                "/opt/homebrew/Caskroom/miniconda/base/envs/playground/bin/python",
+                os.path.expanduser("~/miniconda3/envs/playground/bin/python"),
+                os.path.expanduser("~/.conda/envs/playground/bin/python"),
+            ]
+            for py_bin in candidate_pythons:
+                if os.path.exists(py_bin):
+                    os.execv(py_bin, [py_bin] + sys.argv)
         from foolgit_pkg.gui import launch_gui
         launch_gui(target_dir=target_dir)
         sys.exit(0)
