@@ -1,0 +1,38 @@
+#!/usr/bin/env python3
+"""
+FoolGit - 傻瓜式 Git 助手
+专为日常高频 Git 操作定制的极简命令行工具。
+"""
+
+import sys
+import os
+
+# 将当前脚本所在目录加入模块搜索路径，确保可以直接运行
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+
+from foolgit_pkg.cli import FoolGitCLI
+
+
+def main():
+    target_dir = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "."
+    
+    # 简单的参数支持
+    if "-v" in sys.argv or "--version" in sys.argv:
+        from foolgit_pkg import __version__
+        print(f"FoolGit version {__version__}")
+        sys.exit(0)
+
+    if "-h" in sys.argv or "--help" in sys.argv:
+        print("FoolGit - 傻瓜式定制 Git 助手")
+        print("用法: foolgit [路径]")
+        print("直接在任意 Git 仓库目录下运行 foolgit 即可进入交互界面。")
+        sys.exit(0)
+
+    cli = FoolGitCLI(target_dir=target_dir)
+    cli.run()
+
+
+if __name__ == "__main__":
+    main()

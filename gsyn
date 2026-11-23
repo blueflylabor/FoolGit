@@ -1,0 +1,540 @@
+#!/bin/bash
+
+# gsyn - Git Sync 一键推送脚本
+# 默认推送所有仓库，支持可选操作和序号选择
+
+set -e
+
+# 颜色定义
+RED='\033[0;31m'
+GREEN='\033[0;32m'
+YELLOW='\033[1;33m'
+BLUE='\033[0;34m'
+CYAN='\033[0;36m'
+NC='\033[0m' # No Color
+BOLD='\033[1m'
+
+# 脚本版本
+VERSION="1.0.0"
+
+# 默认配置
+DEFAULT_COMMIT_MSG="update: $(date '+%Y-%m-%d %H:%M:%S')"
+AUTO_PULL=true
+AUTO_PUSH=true
+SHOW_DIFF=false
+DRY_RUN=false
+
+# 全局数组：存储找到的 git 仓库
+REPOS=()
+REPO_NAMES=()
+REPO_PATHS=()
+
+# 打印帮助信息
+show_help() {
+    cat << EOF
+${BOLD}gsyn${NC} - Git 一键同步推送工具 (macOS)
+
+${BOLD}用法:${NC}
+    gsyn [选项] [路径...]
+
+${BOLD}默认行为:${NC}
+    自动查找当前目录下的所有 git 仓库，逐个执行 pull → add → commit → push
+
+${BOLD}选项:${NC}
+    -h, --help          显示帮助信息
+    -v, --version       显示版本号
+    -m, --message MSG   自定义提交信息 (默认: "update: 当前时间")
+    -s, --select        进入交互模式，选择要操作的仓库
+    -i, --index N       只操作第 N 个仓库 (配合 --select 使用)
+    -p, --pull-only     仅执行 git pull
+    -c, --commit-only   仅执行 add + commit，不 push
+    -n, --dry-run       试运行模式，只显示命令不执行
+    -d, --diff          提交前显示 diff
+    --no-pull           跳过 git pull
+    --no-push           跳过 git push
+    -a, --all           递归查找所有子目录中的 git 仓库
+    -l, --list          仅列出找到的仓库，不执行操作
+
+${BOLD}示例:${NC}
+    gsyn                          # 推送当前目录下所有仓库
+    gsyn -s                       # 交互选择模式
+    gsyn -s -i 3                  # 只操作第3个仓库
+    gsyn -m "fix: bug修复"        # 使用自定义提交信息
+    gsyn ~/projects -a            # 递归推送 ~/projects 下所有仓库
+    gsyn -n                       # 试运行，查看会执行哪些命令
+    gsyn -l                       # 列出所有找到的仓库
+
+${BOLD}交互模式操作:${NC}
+    输入序号 (如: 1,3,5)  选择指定仓库
+    a 或 all              选择全部仓库
+    q 或 quit            退出
+
+EOF
+}
+
+# 打印带颜色的信息
+info()    { echo -e "${BLUE}[INFO]${NC} $1"; }
+success() { echo -e "${GREEN}[OK]${NC} $1"; }
+warn()    { echo -e "${YELLOW}[WARN]${NC} $1"; }
+error()   { echo -e "${RED}[ERROR]${NC} $1"; }
+header()  { echo -e "\n${BOLD}${CYAN}▸ $1${NC}"; }
+
+# 查找 git 仓库
+find_repos() {
+    local search_path="${1:-.}"
+    local recursive="${2:-false}"
+
+    REPOS=()
+    REPO_NAMES=()
+    REPO_PATHS=()
+
+    if [[ "$recursive" == "true" ]]; then
+        while IFS= read -r -d '' repo; do
+            local repo_path="$(dirname "$repo")"
+            local repo_name="$(basename "$repo_path")"
+            REPOS+=("$repo_path")
+            REPO_NAMES+=("$repo_name")
+            REPO_PATHS+=("$repo_path")
+        done < <(find "$search_path" -maxdepth 3 -type d -name ".git" -print0 2>/dev/null)
+    else
+        # 只查找直接子目录
+        for dir in "$search_path"/*/; do
+            if [[ -d "$dir/.git" ]]; then
+                local repo_name="$(basename "$dir")"
+                REPOS+=("$dir")
+                REPO_NAMES+=("$repo_name")
+                REPO_PATHS+=("$dir")
+            fi
+        done
+    fi
+
+    # 也检查当前目录本身是否是 git 仓库
+    if [[ -d "$search_path/.git" ]]; then
+        local repo_name="$(basename "$search_path")"
+        # 避免重复添加
+        local exists=false
+        for r in "${REPOS[@]}"; do
+            if [[ "$r" == "$search_path" ]]; then
+                exists=true
+                break
+            fi
+        done
+        if [[ "$exists" == "false" ]]; then
+            REPOS+=("$search_path")
+            REPO_NAMES+=("$repo_name")
+            REPO_PATHS+=("$search_path")
+        fi
+    fi
+}
+
+# 显示仓库列表
+list_repos() {
+    if [[ ${#REPOS[@]} -eq 0 ]]; then
+        warn "未找到任何 git 仓库"
+        return 1
+    fi
+
+    echo -e "\n${BOLD}找到的 Git 仓库:${NC}"
+    echo -e "${BOLD}┌─────┬──────────────────────────────┬──────────────────────────────────────────┐${NC}"
+    printf "${BOLD}│ %-3s │ %-28s │ %-40s │${NC}\n" "序号" "仓库名" "路径"
+    echo -e "${BOLD}├─────┼──────────────────────────────┼──────────────────────────────────────────┤${NC}"
+
+    local i=1
+    for repo in "${REPOS[@]}"; do
+        local name="${REPO_NAMES[$((i-1))]}"
+        local path="$repo"
+        # 截断显示
+        if [[ ${#name} -gt 28 ]]; then
+            name="${name:0:25}..."
+        fi
+        if [[ ${#path} -gt 40 ]]; then
+            path="...${path: -37}"
+        fi
+        printf "│ ${CYAN}%-3s${NC} │ %-28s │ %-40s │\n" "$i" "$name" "$path"
+        ((i++))
+    done
+    echo -e "${BOLD}└─────┴──────────────────────────────┴──────────────────────────────────────────┘${NC}"
+    echo -e "\n共找到 ${GREEN}${#REPOS[@]}${NC} 个仓库\n"
+}
+
+# 获取仓库当前状态
+get_repo_status() {
+    local repo="$1"
+    cd "$repo"
+
+    local branch="$(git branch --show-current 2>/dev/null || echo 'unknown')"
+    local status="$(git status --porcelain 2>/dev/null)"
+    local ahead_behind="$(git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null || echo '0\t0')"
+    local ahead="$(echo "$ahead_behind" | cut -f1)"
+    local behind="$(echo "$ahead_behind" | cut -f2)"
+
+    local status_icon="${GREEN}✓${NC}"
+    local status_text="${GREEN}已同步${NC}"
+
+    if [[ -n "$status" ]]; then
+        status_icon="${YELLOW}✎${NC}"
+        status_text="${YELLOW}有修改${NC}"
+    elif [[ "$ahead" -gt 0 ]]; then
+        status_icon="${CYAN}↑${NC}"
+        status_text="${CYAN}待推送${NC}"
+    elif [[ "$behind" -gt 0 ]]; then
+        status_icon="${BLUE}↓${NC}"
+        status_text="${BLUE}待拉取${NC}"
+    fi
+
+    echo "$branch|$status_icon|$status_text|$ahead|$behind"
+}
+
+# 显示带状态的仓库列表
+list_repos_with_status() {
+    if [[ ${#REPOS[@]} -eq 0 ]]; then
+        warn "未找到任何 git 仓库"
+        return 1
+    fi
+
+    echo -e "\n${BOLD}Git 仓库状态:${NC}"
+    echo -e "${BOLD}┌─────┬────────────────────────┬──────────────────┬──────────────┬──────────────┐${NC}"
+    printf "${BOLD}│ %-3s │ %-22s │ %-16s │ %-12s │ %-12s │${NC}\n" "序号" "仓库名" "分支" "状态" "操作"
+    echo -e "${BOLD}├─────┼────────────────────────┼──────────────────┼──────────────┼──────────────┤${NC}"
+
+    local i=1
+    for repo in "${REPOS[@]}"; do
+        local name="${REPO_NAMES[$((i-1))]}"
+        local status_info="$(get_repo_status "$repo")"
+        local branch="$(echo "$status_info" | cut -d'|' -f1)"
+        local icon="$(echo "$status_info" | cut -d'|' -f2)"
+        local stext="$(echo "$status_info" | cut -d'|' -f3)"
+        local ahead="$(echo "$status_info" | cut -d'|' -f4)"
+        local behind="$(echo "$status_info" | cut -d'|' -f5)"
+
+        if [[ ${#name} -gt 22 ]]; then
+            name="${name:0:19}..."
+        fi
+        if [[ ${#branch} -gt 16 ]]; then
+            branch="${branch:0:13}..."
+        fi
+
+        printf "│ ${CYAN}%-3s${NC} │ %-22s │ %-16s │ %-12s │" "$i" "$name" "$branch" "$stext"
+
+        local action=""
+        if [[ "$ahead" -gt 0 ]]; then
+            action="${CYAN}push${NC}"
+        elif [[ "$behind" -gt 0 ]]; then
+            action="${BLUE}pull${NC}"
+        else
+            action="${GREEN}sync${NC}"
+        fi
+        printf " %-12s │\n" "$action"
+
+        ((i++))
+    done
+    echo -e "${BOLD}└─────┴────────────────────────┴──────────────────┴──────────────┴──────────────┘${NC}"
+    echo -e "\n共找到 ${GREEN}${#REPOS[@]}${NC} 个仓库\n"
+}
+
+# 执行 git 命令
+run_git_cmd() {
+    local repo="$1"
+    shift
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        echo -e "${YELLOW}[DRY-RUN]${NC} cd $repo && git $@"
+        return 0
+    fi
+
+    cd "$repo"
+    git "$@"
+}
+
+# 同步单个仓库
+sync_repo() {
+    local repo="$1"
+    local name="$2"
+    local index="$3"
+
+    header "[$index] $name"
+    echo -e "路径: ${CYAN}$repo${NC}"
+
+    cd "$repo"
+
+    # 检查是否有远程仓库
+    if ! git remote get-url origin &>/dev/null; then
+        warn "没有配置远程仓库 (origin)，跳过"
+        return 0
+    fi
+
+    local branch="$(git branch --show-current)"
+    echo -e "分支: ${CYAN}$branch${NC}"
+
+    # 1. Git Pull
+    if [[ "$AUTO_PULL" == "true" ]]; then
+        info "正在拉取最新代码..."
+        if run_git_cmd "$repo" pull origin "$branch" 2>&1; then
+            success "拉取完成"
+        else
+            error "拉取失败，可能存在冲突"
+            return 1
+        fi
+    fi
+
+    # 2. Git Status
+    local status="$(git status --porcelain)"
+
+    if [[ -z "$status" && "$AUTO_PULL" == "true" ]]; then
+        success "工作区干净，无需提交"
+
+        # 检查是否有本地提交需要推送
+        local ahead="$(git rev-list --left-right --count HEAD...@{upstream} 2>/dev/null | cut -f1)"
+        if [[ "$ahead" -gt 0 && "$AUTO_PUSH" == "true" ]]; then
+            info "检测到 $ahead 个本地提交待推送..."
+            if run_git_cmd "$repo" push origin "$branch" 2>&1; then
+                success "推送完成"
+            else
+                error "推送失败"
+                return 1
+            fi
+        fi
+        return 0
+    fi
+
+    # 3. Git Add
+    info "添加所有更改..."
+    if run_git_cmd "$repo" add -A 2>&1; then
+        success "添加完成"
+    else
+        error "添加失败"
+        return 1
+    fi
+
+    # 4. 显示 Diff (如果启用)
+    if [[ "$SHOW_DIFF" == "true" ]]; then
+        info "更改内容:"
+        run_git_cmd "$repo" diff --cached --stat 2>&1
+        echo ""
+    fi
+
+    # 5. Git Commit
+    info "提交更改: $COMMIT_MSG"
+    if run_git_cmd "$repo" commit -m "$COMMIT_MSG" 2>&1; then
+        success "提交完成"
+    else
+        warn "没有需要提交的更改 (或提交失败)"
+    fi
+
+    # 6. Git Push
+    if [[ "$AUTO_PUSH" == "true" ]]; then
+        info "推送到远程..."
+        if run_git_cmd "$repo" push origin "$branch" 2>&1; then
+            success "推送完成"
+        else
+            error "推送失败"
+            return 1
+        fi
+    fi
+
+    echo ""
+}
+
+# 交互式选择仓库
+interactive_select() {
+    list_repos_with_status
+
+    echo -e "${BOLD}请选择要操作的仓库:${NC}"
+    echo -e "  ${CYAN}输入序号${NC} (如: 1,3,5 或 1-3)"
+    echo -e "  ${CYAN}a${NC} 或 ${CYAN}all${NC}  - 选择全部"
+    echo -e "  ${CYAN}q${NC} 或 ${CYAN}quit${NC} - 退出"
+    echo ""
+    read -r -p "你的选择: " selection
+
+    case "$selection" in
+        q|quit|exit)
+            info "已取消"
+            exit 0
+            ;;
+        a|all|A|ALL)
+            SELECTED_REPOS=($(seq 1 ${#REPOS[@]}))
+            ;;
+        *)
+            SELECTED_REPOS=()
+            # 解析输入，支持逗号和横杠
+            IFS=',' read -ra parts <<< "$selection"
+            for part in "${parts[@]}"; do
+                if [[ "$part" =~ ^([0-9]+)-([0-9]+)$ ]]; then
+                    local start="${BASH_REMATCH[1]}"
+                    local end="${BASH_REMATCH[2]}"
+                    for ((i=start; i<=end; i++)); do
+                        if [[ $i -ge 1 && $i -le ${#REPOS[@]} ]]; then
+                            SELECTED_REPOS+=("$i")
+                        fi
+                    done
+                elif [[ "$part" =~ ^[0-9]+$ ]]; then
+                    if [[ $part -ge 1 && $part -le ${#REPOS[@]} ]]; then
+                        SELECTED_REPOS+=("$part")
+                    else
+                        warn "序号 $part 超出范围"
+                    fi
+                fi
+            done
+
+            # 去重
+            if command -v awk &>/dev/null; then
+                SELECTED_REPOS=($(echo "${SELECTED_REPOS[@]}" | tr ' ' '\n' | awk '!a[$0]++'))
+            fi
+            ;;
+    esac
+}
+
+# 主函数
+main() {
+    local search_paths=(".")
+    local recursive=false
+    local select_mode=false
+    local list_only=false
+    local single_index=""
+    COMMIT_MSG="$DEFAULT_COMMIT_MSG"
+    SELECTED_REPOS=()
+
+    # 解析参数
+    while [[ $# -gt 0 ]]; do
+        case "$1" in
+            -h|--help)
+                show_help
+                exit 0
+                ;;
+            -v|--version)
+                echo "gsyn version $VERSION"
+                exit 0
+                ;;
+            -m|--message)
+                COMMIT_MSG="$2"
+                shift 2
+                ;;
+            -s|--select)
+                select_mode=true
+                shift
+                ;;
+            -i|--index)
+                single_index="$2"
+                shift 2
+                ;;
+            -p|--pull-only)
+                AUTO_PUSH=false
+                shift
+                ;;
+            -c|--commit-only)
+                AUTO_PUSH=false
+                shift
+                ;;
+            -n|--dry-run)
+                DRY_RUN=true
+                shift
+                ;;
+            -d|--diff)
+                SHOW_DIFF=true
+                shift
+                ;;
+            --no-pull)
+                AUTO_PULL=false
+                shift
+                ;;
+            --no-push)
+                AUTO_PUSH=false
+                shift
+                ;;
+            -a|--all)
+                recursive=true
+                shift
+                ;;
+            -l|--list)
+                list_only=true
+                shift
+                ;;
+            -*)
+                error "未知选项: $1"
+                echo "使用 gsyn --help 查看帮助"
+                exit 1
+                ;;
+            *)
+                search_paths=("$1")
+                shift
+                ;;
+        esac
+    done
+
+    # 查找仓库
+    find_repos "${search_paths[0]}" "$recursive"
+
+    if [[ ${#REPOS[@]} -eq 0 ]]; then
+        error "未找到任何 git 仓库"
+        echo "提示: 使用 -a 选项递归查找子目录"
+        exit 1
+    fi
+
+    # 仅列出模式
+    if [[ "$list_only" == "true" ]]; then
+        list_repos_with_status
+        exit 0
+    fi
+
+    # 选择模式
+    if [[ "$select_mode" == "true" ]]; then
+        if [[ -n "$single_index" ]]; then
+            if [[ "$single_index" -ge 1 && "$single_index" -le ${#REPOS[@]} ]]; then
+                SELECTED_REPOS=("$single_index")
+            else
+                error "序号 $single_index 超出范围 (1-${#REPOS[@]})"
+                exit 1
+            fi
+        else
+            interactive_select
+        fi
+    else
+        # 默认全选
+        SELECTED_REPOS=($(seq 1 ${#REPOS[@]}))
+    fi
+
+    if [[ ${#SELECTED_REPOS[@]} -eq 0 ]]; then
+        warn "未选择任何仓库"
+        exit 0
+    fi
+
+    # 显示操作摘要
+    echo -e "\n${BOLD}═══════════════════════════════════════════════${NC}"
+    echo -e "${BOLD}  Git Sync 操作摘要${NC}"
+    echo -e "${BOLD}═══════════════════════════════════════════════${NC}"
+    echo -e "提交信息: ${CYAN}$COMMIT_MSG${NC}"
+    echo -e "自动拉取: $([[ "$AUTO_PULL" == "true" ]] && echo "${GREEN}开启${NC}" || echo "${RED}关闭${NC}")"
+    echo -e "自动推送: $([[ "$AUTO_PUSH" == "true" ]] && echo "${GREEN}开启${NC}" || echo "${RED}关闭${NC}")"
+    echo -e "试运行模式: $([[ "$DRY_RUN" == "true" ]] && echo "${YELLOW}开启${NC}" || echo "${GREEN}关闭${NC}")"
+    echo -e "选中仓库: ${GREEN}${#SELECTED_REPOS[@]}${NC} 个"
+    echo -e "${BOLD}═══════════════════════════════════════════════${NC}\n"
+
+    # 执行同步
+    local success_count=0
+    local fail_count=0
+
+    for idx in "${SELECTED_REPOS[@]}"; do
+        local repo="${REPOS[$((idx-1))]}"
+        local name="${REPO_NAMES[$((idx-1))]}"
+
+        if sync_repo "$repo" "$name" "$idx"; then
+            ((success_count++))
+        else
+            ((fail_count++))
+        fi
+    done
+
+    # 总结
+    echo -e "\n${BOLD}═══════════════════════════════════════════════${NC}"
+    echo -e "${BOLD}  同步完成${NC}"
+    echo -e "${BOLD}═══════════════════════════════════════════════${NC}"
+    echo -e "成功: ${GREEN}$success_count${NC}"
+    echo -e "失败: ${RED}$fail_count${NC}"
+    echo -e "${BOLD}═══════════════════════════════════════════════${NC}\n"
+
+    if [[ $fail_count -gt 0 ]]; then
+        exit 1
+    fi
+}
+
+main "$@"
