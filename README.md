@@ -140,11 +140,43 @@ sudo ln -sf $(pwd)/foolgit-gui /usr/local/bin/foolgit-gui
 
 ## 🛠️ Compilation & Packaging (Standalone Binaries)
 
-FoolGit provides dedicated scripts to compile standalone, self-contained executables and application bundles without requiring users to install Python or PyQt6 manually.
+FoolGit provides dedicated, isolated build scripts for both the **lightweight CLI** and the **desktop GUI**, allowing users to run FoolGit on any machine without installing Python or any libraries.
 
-### 🍎 1. macOS Build Guide (CLI, App Bundle & DMG)
+---
 
-Prerequisites:
+### ⚡ 1. Building the Standalone CLI Binary (macOS & Linux)
+
+The CLI binary has **ZERO GUI/Qt dependencies**, compiles in seconds, and produces an ultra-lean binary (**~7 MB**):
+
+```bash
+# Using dedicated CLI build script
+./scripts/build_cli.sh
+
+# Or using Makefile
+make cli
+```
+
+**Build Artifact**:
+- `dist/foolgit` (Standalone executable, no Python required)
+
+**How to Install the compiled CLI binary**:
+```bash
+sudo cp dist/foolgit /usr/local/bin/
+# Or for local user:
+cp dist/foolgit ~/.local/bin/
+```
+
+On Windows:
+```cmd
+scripts\build_cli.bat
+```
+Produces `dist\foolgit.exe`.
+
+---
+
+### 🍎 2. Building the macOS Desktop GUI & DMG
+
+Prerequisites (only needed for building GUI):
 ```bash
 pip install pyinstaller PyQt6
 ```
@@ -152,37 +184,46 @@ pip install pyinstaller PyQt6
 Run the macOS build script:
 ```bash
 ./scripts/build_macos.sh
-# Or using the universal runner:
+
+# Or using Makefile
+make gui
+
+# Or build everything (CLI + GUI + DMG)
 python3 scripts/build.py --all
 ```
 
 **Generated Artifacts in `dist/`**:
-1. **`dist/foolgit`**: Standalone single-binary executable for terminal.
+1. **`dist/foolgit`**: Lightweight CLI binary.
 2. **`dist/FoolGit.app`**: Complete macOS Application bundle. Double-click to run or drag into `/Applications`.
-3. **`dist/FoolGit-1.0.0-macOS.dmg`**: Drag-and-drop macOS disk image installer.
+3. **`dist/FoolGit-1.0.0-macOS.dmg`**: Drag-and-drop macOS disk image installer for easy distribution.
 
 ---
 
-### 🐧 2. Linux Build Guide
-Run:
+### 🐧 3. Building for Linux
 ```bash
 ./scripts/build_linux.sh
 ```
-**Generated Artifacts**:
-- `dist/foolgit` (Standalone CLI binary)
-- `dist/foolgit-gui` (Standalone GUI binary)
-- `dist/foolgit.desktop` (Application menu launcher)
+**Artifacts**: `dist/foolgit` (CLI), `dist/foolgit-gui` (GUI), `dist/foolgit.desktop`.
 
 ---
 
-### 🪟 3. Windows Build Guide
-Run in Command Prompt:
+### 🪟 4. Building for Windows
 ```cmd
 scripts\build_windows.bat
 ```
-**Generated Artifacts**:
-- `dist\foolgit.exe` (CLI executable)
-- `dist\foolgit-gui.exe` (Windowed GUI executable)
+**Artifacts**: `dist\foolgit.exe` and `dist\foolgit-gui.exe`.
+
+---
+
+### 🧰 5. Developer Makefile Shortcuts
+```bash
+make cli       # Build standalone lightweight CLI binary
+make gui       # Build macOS GUI app and DMG
+make all       # Build both CLI and GUI
+make install   # Run installer (install.sh)
+make uninstall # Run uninstaller (uninstall.sh)
+make clean     # Clean dist/ and build/ folders
+```
 
 ---
 

@@ -42,15 +42,19 @@ ${PY_BIN} --version
 rm -rf build dist
 export PYINSTALLER_CONFIG_DIR="${PROJECT_ROOT}/build/pyinstaller_cache"
 
-# 2. Build Standalone CLI Binary (foolgit)
-echo -e "\n${BOLD}[1/3] Compiling CLI binary (foolgit)...${NC}"
+# 2. Build Standalone CLI Binary (foolgit - lightweight, no Qt)
+echo -e "\n${BOLD}[1/3] Compiling standalone CLI binary (foolgit)...${NC}"
 ${PY_BIN} -m PyInstaller \
     --name "foolgit" \
     --onefile \
     --clean \
     --noconfirm \
+    --exclude-module PyQt6 \
+    --exclude-module PyQt5 \
+    --exclude-module PySide6 \
+    --exclude-module tkinter \
     --add-data "foolgit_pkg:foolgit_pkg" \
-    foolgit
+    scripts/cli_main.py
 
 echo -e "${GREEN}✓ CLI binary built at dist/foolgit${NC}"
 

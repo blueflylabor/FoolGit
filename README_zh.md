@@ -55,20 +55,53 @@ sudo ln -sf $(pwd)/foolgit-gui /usr/local/bin/foolgit-gui
 
 ## 📦 跨平台编译与打包 (Compilation & Packaging)
 
-项目提供了为各大平台独立打包二进制可执行文件与安装包的脚本，无需使用者预先安装 Python 即可运行！
+项目提供了为各大平台独立打包二进制可执行文件与安装包的脚本，使用者**无需预先安装 Python 或任何库**即可原生运行！
 
-### 🍎 macOS 平台专属编译打包
+---
+
+### ⚡ 1. 独立构建纯净终端 CLI 二进制程序 (重点推荐)
+CLI 版完全不依赖任何 GUI 或 Qt 库，编译耗时仅需数秒，产物极小（**约 7 MB**）：
+
+```bash
+# 专属 CLI 构建脚本
+./scripts/build_cli.sh
+
+# 或使用 Makefile
+make cli
+```
+**生成产物**：
+- `dist/foolgit`（单文件独立二进制可执行程序）
+
+**如何将编译产物安装到系统**：
+```bash
+sudo cp dist/foolgit /usr/local/bin/
+# 或安装到当前用户目录:
+cp dist/foolgit ~/.local/bin/
+```
+
+Windows 下对应：
+```cmd
+scripts\build_cli.bat
+```
+生成 `dist\foolgit.exe`。
+
+---
+
+### 🍎 2. macOS 桌面端 GUI 与 DMG 打包
 执行：
 ```bash
 ./scripts/build_macos.sh
-# 或使用通用构建器: python scripts/build.py --all
+# 或使用 Makefile: make gui
+# 或使用通用构建器: python3 scripts/build.py --all
 ```
 构建脚本将自动在 `dist/` 目录下生成：
 1. **`dist/foolgit`**：单文件原生终端可执行程序。
 2. **`dist/FoolGit.app`**：完整的 macOS 应用 Bundle（可直接双击运行或拖入 `/Applications`）。
 3. **`dist/FoolGit-1.0.0-macOS.dmg`**：标准 macOS 拖拽安装镜像包！
 
-### 🐧 Linux 平台编译打包
+---
+
+### 🐧 3. Linux 平台编译打包
 ```bash
 ./scripts/build_linux.sh
 ```
@@ -77,13 +110,27 @@ sudo ln -sf $(pwd)/foolgit-gui /usr/local/bin/foolgit-gui
 - `dist/foolgit-gui`（GUI 独立二进制）
 - `dist/foolgit.desktop`（系统应用菜单图标）
 
-### 🪟 Windows 平台编译打包
+---
+
+### 🪟 4. Windows 平台编译打包
 ```cmd
 scripts\build_windows.bat
 ```
 生成：
 - `dist\foolgit.exe`
 - `dist\foolgit-gui.exe`
+
+---
+
+### 🧰 5. 开发者 Makefile 常用指令
+```bash
+make cli       # 独立构建轻量 CLI 二进制程序 (~7MB)
+make gui       # 构建 macOS GUI 应用包及 DMG 镜像
+make all       # 同时构建 CLI 与 GUI
+make install   # 执行系统安装 (install.sh)
+make uninstall # 执行系统卸载 (uninstall.sh)
+make clean     # 清理 dist/ 与 build/ 缓存
+```
 
 ---
 

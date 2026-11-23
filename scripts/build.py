@@ -40,8 +40,8 @@ def find_pyinstaller():
 
 
 def build_cli(py_bin: str):
-    """Build standalone CLI binary"""
-    print("\n📦 [1/2] Building standalone CLI executable...")
+    """Build standalone CLI binary (Lightweight, excludes GUI/Qt)"""
+    print("\n📦 Building standalone CLI executable...")
     sep = ";" if platform.system() == "Windows" else ":"
     env = os.environ.copy()
     cache_dir = str(PROJECT_ROOT / "build" / "pyinstaller_cache")
@@ -53,8 +53,12 @@ def build_cli(py_bin: str):
         "--onefile",
         "--clean",
         "--noconfirm",
+        "--exclude-module", "PyQt6",
+        "--exclude-module", "PyQt5",
+        "--exclude-module", "PySide6",
+        "--exclude-module", "tkinter",
         "--add-data", f"foolgit_pkg{sep}foolgit_pkg",
-        str(PROJECT_ROOT / "foolgit")
+        str(PROJECT_ROOT / "scripts" / "cli_main.py")
     ]
     subprocess.check_call(cmd, cwd=str(PROJECT_ROOT), env=env)
     print("✅ CLI build complete: dist/foolgit")

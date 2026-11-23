@@ -38,8 +38,9 @@ def main():
             for py_bin in candidate_pythons:
                 if os.path.exists(py_bin):
                     os.execv(py_bin, [py_bin] + sys.argv)
-        from .gui import launch_gui
-        launch_gui(target_dir=target_dir)
+        import importlib
+        gui_mod = importlib.import_module("foolgit_pkg.gui")
+        gui_mod.launch_gui(target_dir=target_dir)
         sys.exit(0)
 
     cli = FoolGitCLI(target_dir=target_dir)
