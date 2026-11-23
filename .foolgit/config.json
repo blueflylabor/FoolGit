@@ -6,7 +6,8 @@
     "status",
     "undo",
     "branch",
-    "stash"
+    "stash",
+    "history"
   ],
   "custom_commands": [],
   "settings": {

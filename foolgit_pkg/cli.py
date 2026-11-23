@@ -69,6 +69,7 @@ class FoolGitCLI:
 
     def _render_header(self, info: Dict[str, Any]):
         """渲染顶部直观健康卡片"""
+        print()  # 保证与上方输出保持间距
         repo_name = info["name"]
         branch = info["branch"]
         clean_status = c("✨ 干净无修改", GREEN) if info["is_clean"] else c(f"✎ {info['total_changes']} 个文件有改动", YELLOW)
