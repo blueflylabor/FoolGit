@@ -14,5 +14,6 @@
     "default_commit_prefix": "update: ",
     "auto_pull_before_push": true,
     "confirm_before_push": false
-  }
+  },
+  "language": "en"
 }

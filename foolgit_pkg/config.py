@@ -1,15 +1,15 @@
 """
 FoolGit 用户配置管理器
-负责 ~/.foolgit/config.json 的读写、出厂设置恢复与自定义命令增删改查。
+负责 ~/.foolgit/config.json 的读写、出厂设置恢复、语言设置与自定义命令增删改查。
 """
 
 import os
 import json
-import os
-import json
 from pathlib import Path
 from typing import Dict, List, Any, Optional
-from .presets import DEFAULT_ACTIVE_IDS, PRESET_LIBRARY
+from .presets import DEFAULT_ACTIVE_IDS, ALL_PRESET_IDS
+from .i18n import set_language, get_language, DEFAULT_LANG
+
 
 def get_default_config_path() -> Path:
     """获取配置文件路径，带自动降级与权限保护"""
@@ -37,9 +37,10 @@ def get_default_config_path() -> Path:
 
 
 def get_default_config() -> Dict[str, Any]:
-    """生成出厂默认配置结构"""
+    """生成出厂默认配置结构，默认语言为英文 (en)"""
     return {
         "version": "1.0.0",
+        "language": DEFAULT_LANG,  # "en" 默认英文
         "active_preset_ids": list(DEFAULT_ACTIVE_IDS),
         "custom_commands": [],
         "settings": {
@@ -57,6 +58,9 @@ class ConfigManager:
         self.config_path = config_path or get_default_config_path()
         self._memory_cache = get_default_config()
         self._ensure_config()
+        # 初始化 i18n 语言
+        cfg = self.load()
+        set_language(cfg.get("language", DEFAULT_LANG))
 
     def _ensure_config(self) -> None:
         """确保配置目录与文件存在，不存在则自动初始化"""
@@ -67,7 +71,6 @@ class ConfigManager:
             else:
                 self.load()
         except Exception:
-            # 遭遇不可抗力时使用内存配置，保证软件不崩溃
             pass
 
     def load(self) -> Dict[str, Any]:
@@ -83,7 +86,6 @@ class ConfigManager:
             self._memory_cache = data
             return data
         except Exception:
-            # 配置文件损坏或无法读取时安全回退
             return self._memory_cache
 
     def save(self, data: Dict[str, Any]) -> None:
@@ -96,6 +98,18 @@ class ConfigManager:
         except Exception:
             pass
 
+    def get_language(self) -> str:
+        """获取当前配置语言"""
+        cfg = self.load()
+        return cfg.get("language", DEFAULT_LANG)
+
+    def set_language(self, lang: str) -> None:
+        """设置并持久化语言配置"""
+        set_language(lang)
+        cfg = self.load()
+        cfg["language"] = lang
+        self.save(cfg)
+
     def get_active_preset_ids(self) -> List[str]:
         """获取当前启用的预设命令 ID 列表"""
         cfg = self.load()
@@ -103,7 +117,7 @@ class ConfigManager:
 
     def enable_preset(self, preset_id: str) -> bool:
         """从备选库中启用某个功能"""
-        if preset_id not in PRESET_LIBRARY:
+        if preset_id not in ALL_PRESET_IDS:
             return False
         cfg = self.load()
         active = cfg.get("active_preset_ids", [])
@@ -160,3 +174,4 @@ class ConfigManager:
     def reset_to_defaults(self) -> None:
         """重置回出厂默认状态"""
         self.save(get_default_config())
+        set_language(DEFAULT_LANG)

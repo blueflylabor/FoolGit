@@ -1,0 +1,23 @@
+#!/usr/bin/env python3
+"""
+FoolGit GUI - 傻瓜式 Git 助手桌面版
+直接运行此脚本启动极简桌面窗口。
+"""
+
+import sys
+import os
+
+CURRENT_DIR = os.path.dirname(os.path.abspath(__file__))
+if CURRENT_DIR not in sys.path:
+    sys.path.insert(0, CURRENT_DIR)
+
+from foolgit_pkg.gui import launch_gui
+
+
+def main():
+    target_dir = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "."
+    launch_gui(target_dir=target_dir)
+
+
+if __name__ == "__main__":
+    main()

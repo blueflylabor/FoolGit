@@ -25,9 +25,18 @@ def main():
         sys.exit(0)
 
     if "-h" in sys.argv or "--help" in sys.argv:
-        print("FoolGit - 傻瓜式定制 Git 助手")
-        print("用法: foolgit [路径]")
-        print("直接在任意 Git 仓库目录下运行 foolgit 即可进入交互界面。")
+        print("FoolGit - 傻瓜式定制 Git 助手 / Simple & Foolproof Git Assistant")
+        print("用法 / Usage: foolgit [路径] [选项]")
+        print("选项 / Options:")
+        print("  -g, --gui      启动极简桌面图形界面 / Launch lightweight desktop GUI")
+        print("  -v, --version  显示版本号 / Show version")
+        print("  -h, --help     显示此帮助信息 / Show this help")
+        print("\n直接运行 foolgit 即可进入交互式终端选择界面。")
+        sys.exit(0)
+
+    if "-g" in sys.argv or "--gui" in sys.argv:
+        from foolgit_pkg.gui import launch_gui
+        launch_gui(target_dir=target_dir)
         sys.exit(0)
 
     cli = FoolGitCLI(target_dir=target_dir)
