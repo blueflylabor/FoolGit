@@ -48,12 +48,6 @@ def run_git(args: List[str], cwd: str = ".") -> GitResult:
         return GitResult(-1, "", str(e), " ".join(full_cmd))
 
 
-def is_git_repo(path: str = ".") -> bool:
-    """检测指定路径是否处于 Git 仓库工作区内"""
-    res = run_git(["rev-parse", "--is-inside-work-tree"], cwd=path)
-    return res.success and res.stdout.strip() == "true"
-
-
 def get_repo_root(path: str = ".") -> Optional[Path]:
     """获取 Git 仓库根目录"""
     res = run_git(["rev-parse", "--show-toplevel"], cwd=path)
@@ -62,53 +56,64 @@ def get_repo_root(path: str = ".") -> Optional[Path]:
     return None
 
 
+def is_git_repo(path: str = ".") -> bool:
+    """检测指定路径是否处于 Git 仓库工作区内 (复用 show-toplevel 减少一次进程调用)"""
+    return get_repo_root(path) is not None
+
+
 class GitEngine:
     """单一仓库操作管理器"""
 
     def __init__(self, repo_path: str = "."):
         self.repo_path = str(get_repo_root(repo_path) or Path(repo_path).resolve())
+        self._cached_remote_url: Optional[str] = None
+
+    def get_remote_url(self) -> str:
+        """按需获取远程 origin 地址并缓存，避免每次渲染都调用"""
+        if self._cached_remote_url is None:
+            remote_res = run_git(["remote", "get-url", "origin"], cwd=self.repo_path)
+            self._cached_remote_url = remote_res.stdout if remote_res.success else ""
+        return self._cached_remote_url
 
     def get_info(self) -> Dict[str, Any]:
-        """获取仓库当前详细健康状况与状态指标"""
-        branch_res = run_git(["branch", "--show-current"], cwd=self.repo_path)
-        branch = branch_res.stdout if branch_res.success and branch_res.stdout else "HEAD"
+        """获取仓库当前详细健康状况与状态指标 (使用 porcelain=v2 单次高效解析)"""
+        status_res = run_git(["status", "--porcelain=v2", "--branch"], cwd=self.repo_path)
 
+        branch = "HEAD"
         ahead = 0
         behind = 0
         has_upstream = False
-        rev_res = run_git(["rev-list", "--left-right", "--count", "HEAD...@{upstream}"], cwd=self.repo_path)
-        if rev_res.success:
-            parts = rev_res.stdout.split()
-            if len(parts) == 2:
-                ahead = int(parts[0])
-                behind = int(parts[1])
-                has_upstream = True
-
-        status_res = run_git(["status", "--porcelain"], cwd=self.repo_path)
         modified_files = []
         untracked_files = []
         staged_files = []
 
         if status_res.success and status_res.stdout:
             for line in status_res.stdout.splitlines():
-                if len(line) < 3:
-                    continue
-                index_st = line[0]
-                work_st = line[1]
-                fname = line[3:].strip()
-                if index_st == "?" and work_st == "?":
-                    untracked_files.append(fname)
-                else:
-                    if index_st in ["M", "A", "D", "R"]:
-                        staged_files.append(fname)
-                    if work_st in ["M", "D"]:
-                        modified_files.append(fname)
+                if line.startswith("# branch.head "):
+                    branch = line[14:].strip()
+                elif line.startswith("# branch.upstream "):
+                    has_upstream = True
+                elif line.startswith("# branch.ab "):
+                    parts = line[12:].split()
+                    for p in parts:
+                        if p.startswith("+"):
+                            ahead = int(p[1:])
+                        elif p.startswith("-"):
+                            behind = int(p[1:])
+                elif line.startswith("1 ") or line.startswith("2 "):
+                    # 1 <XY> ... <path>
+                    parts = line.split(maxsplit=8)
+                    if len(parts) >= 9:
+                        xy = parts[1]
+                        fname = parts[8]
+                        if xy[0] != ".":
+                            staged_files.append(fname)
+                        if xy[1] != ".":
+                            modified_files.append(fname)
+                elif line.startswith("? "):
+                    untracked_files.append(line[2:].strip())
 
         total_changes = len(modified_files) + len(untracked_files) + len(staged_files)
-
-        remote_res = run_git(["remote", "get-url", "origin"], cwd=self.repo_path)
-        remote_url = remote_res.stdout if remote_res.success else ""
-
         repo_name = Path(self.repo_path).name
 
         return {
@@ -123,7 +128,7 @@ class GitEngine:
             "modified": modified_files,
             "untracked": untracked_files,
             "staged": staged_files,
-            "remote_url": remote_url,
+            "remote_url": "origin" if has_upstream else self.get_remote_url(),
         }
 
     def safe_pull(self) -> Tuple[bool, str]:

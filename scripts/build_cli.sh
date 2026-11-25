@@ -43,12 +43,20 @@ echo -e "▸ Target binary: ${BOLD}dist/foolgit${NC}"
 mkdir -p build/pyinstaller_cache dist
 export PYINSTALLER_CONFIG_DIR="${PROJECT_ROOT}/build/pyinstaller_cache"
 
+MODE="--onefile"
+if [ "$1" == "--fast" ] || [ "$1" == "--onedir" ]; then
+    MODE="--onedir"
+    echo -e "▸ Build mode: ${GREEN}Directory mode (--onedir) for INSTANT startup (no temp decompression)${NC}"
+else
+    echo -e "▸ Build mode: ${YELLOW}Single-file mode (--onefile)${NC} (Tip: use --fast for instant startup without decompression)"
+fi
+
 # 2. Compile lightweight CLI binary
-# Explicitly exclude PyQt6 and heavy GUI frameworks to keep binary lean (~12MB)
+# Explicitly exclude PyQt6 and heavy GUI frameworks to keep binary lean
 echo -e "\n${BOLD}▸ Compiling standalone CLI binary with PyInstaller...${NC}"
 ${PY_BIN} -m PyInstaller \
     --name "foolgit" \
-    --onefile \
+    ${MODE} \
     --clean \
     --noconfirm \
     --exclude-module PyQt6 \

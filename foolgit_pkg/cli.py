@@ -94,8 +94,8 @@ class FoolGitCLI:
 
     def _run_single_repo_menu(self):
         """单仓库循环主菜单"""
+        engine = GitEngine(self.target_dir)
         while True:
-            engine = GitEngine(self.target_dir)
             info = engine.get_info()
 
             self._render_header(info)
