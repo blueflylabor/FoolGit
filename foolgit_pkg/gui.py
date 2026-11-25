@@ -31,7 +31,7 @@ DARK_QSS = """
 QMainWindow, QWidget#MainWidget {
     background-color: #121316;
     color: #F3F4F6;
-    font-family: -apple-system, "SF Pro Display", "SF Pro Text", "Segoe UI", Roboto, sans-serif;
+    font-family: Helvetica, Arial, sans-serif;
 }
 
 QFrame.CardFrame {
@@ -184,7 +184,7 @@ QTextEdit#LogConsole {
     background-color: #0A0A0C;
     color: #A7F3D0;
     border: none;
-    font-family: "SF Mono", Menlo, Monaco, "Courier New", monospace;
+    font-family: Menlo, Monaco, Courier, monospace;
     font-size: 11.5px;
     line-height: 1.4;
     padding: 8px;
@@ -1326,6 +1326,7 @@ def launch_gui(target_dir: str = "."):
     """启动 PyQt6 极简图形应用"""
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     app = QApplication(sys.argv)
+    app.setFont(QFont("Helvetica", 12))
     app.setStyleSheet(DARK_QSS)
 
     window = FoolGitMainWindow(target_dir=target_dir)
