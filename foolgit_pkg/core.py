@@ -229,10 +229,27 @@ class GitEngine:
         elif mode == "discard_file":
             if not target:
                 return False, "Target file required."
+            target_path = Path(self.repo_path) / target
+            if target_path.exists():
+                # 检测是否为未跟踪文件
+                check = run_git(["ls-files", "--error-unmatch", target], cwd=self.repo_path)
+                if not check.success:
+                    try:
+                        if target_path.is_file() or target_path.is_symlink():
+                            target_path.unlink()
+                        elif target_path.is_dir():
+                            import shutil
+                            shutil.rmtree(target_path)
+                        return True, f"✅ {t('discard_file_success', target=target)}"
+                    except Exception as e:
+                        return False, f"❌ {str(e)}"
+
+            # 已跟踪文件：先取消暂存再还原工作区
+            run_git(["reset", "HEAD", "--", target], cwd=self.repo_path)
             res = run_git(["checkout", "HEAD", "--", target], cwd=self.repo_path)
             if res.success:
                 return True, f"✅ {t('discard_file_success', target=target)}"
-            return False, f"❌ {res.stderr}"
+            return False, f"❌ {res.stderr or res.stdout}"
 
         elif mode == "uncommit":
             res = run_git(["reset", "--soft", "HEAD~1"], cwd=self.repo_path)
@@ -303,6 +320,163 @@ class GitEngine:
         """获取简明改动差异统计"""
         res = run_git(["diff", "--stat"], cwd=self.repo_path)
         return res.stdout if res.success else ""
+
+    def delete_branch(self, branch_name: str, force: bool = False) -> Tuple[bool, str]:
+        """删除指定本地分支"""
+        info = self.get_info()
+        if branch_name == info["branch"]:
+            return False, f"⚠️ {t('branch_cannot_delete_current', branch=branch_name)}"
+        flag = "-D" if force else "-d"
+        res = run_git(["branch", flag, branch_name], cwd=self.repo_path)
+        if res.success:
+            return True, f"✅ {t('branch_delete_success', branch=branch_name)}"
+        return False, f"❌ {t('branch_delete_failed', error=res.stderr or res.stdout)}"
+
+    def clean_preview(self) -> List[str]:
+        """预览将被清理的未跟踪文件或文件夹"""
+        res = run_git(["clean", "-nd"], cwd=self.repo_path)
+        items = []
+        if res.success and res.stdout:
+            for line in res.stdout.splitlines():
+                line = line.strip()
+                if not line:
+                    continue
+                if "Would remove " in line:
+                    items.append(line.split("Would remove ", 1)[1].strip())
+                elif "remove " in line:
+                    items.append(line.split("remove ", 1)[1].strip())
+                else:
+                    items.append(line)
+        return items
+
+    def clean_execute(self) -> Tuple[bool, str]:
+        """彻底清理所有未跟踪的文件与目录"""
+        res = run_git(["clean", "-fd"], cwd=self.repo_path)
+        if res.success:
+            return True, f"✅ {t('clean_success')}"
+        return False, f"❌ {res.stderr or res.stdout}"
+
+    def list_tags(self) -> List[str]:
+        """获取所有版本标签列表（按创建时间倒序）"""
+        res = run_git(["tag", "-l", "--sort=-creatordate"], cwd=self.repo_path)
+        if res.success and res.stdout:
+            return [line.strip() for line in res.stdout.splitlines() if line.strip()]
+        return []
+
+    def create_tag(self, name: str, msg: str = "", push: bool = False) -> Tuple[bool, str]:
+        """创建新版本标签（可选推送远端）"""
+        name = name.strip()
+        if not name:
+            return False, "Tag name cannot be empty."
+        msg_text = msg.strip() if msg and msg.strip() else name
+        res = run_git(["tag", "-a", name, "-m", msg_text], cwd=self.repo_path)
+        if not res.success:
+            return False, f"❌ {res.stderr or res.stdout}"
+        if push:
+            pres = run_git(["push", "origin", name], cwd=self.repo_path)
+            if not pres.success:
+                return True, f"✅ {t('tag_created', tag=name)}\n⚠️ {t('tag_push_all_failed', error=pres.stderr or pres.stdout)}"
+            return True, f"🎉 {t('tag_created', tag=name)} & {t('tag_pushed', tag=name)}"
+        return True, f"✅ {t('tag_created', tag=name)}"
+
+    def delete_tag(self, name: str, remote: bool = False) -> Tuple[bool, str]:
+        """删除本地标签（可选同时从远端删除）"""
+        name = name.strip()
+        if not name:
+            return False, "Tag name cannot be empty."
+        res = run_git(["tag", "-d", name], cwd=self.repo_path)
+        if not res.success:
+            return False, f"❌ {res.stderr or res.stdout}"
+        if remote:
+            pres = run_git(["push", "origin", "--delete", name], cwd=self.repo_path)
+            if not pres.success:
+                return True, f"✅ {t('tag_deleted', tag=name)}\n⚠️ Remote delete failed: {pres.stderr or pres.stdout}"
+        return True, f"✅ {t('tag_deleted', tag=name)}"
+
+    def push_all_tags(self) -> Tuple[bool, str]:
+        """一键推送所有本地标签到远端"""
+        res = run_git(["push", "origin", "--tags"], cwd=self.repo_path)
+        if res.success:
+            return True, f"🎉 {t('tag_push_all_success')}"
+        return False, f"❌ {t('tag_push_all_failed', error=res.stderr or res.stdout)}"
+
+    def list_remotes(self) -> List[Dict[str, str]]:
+        """获取所有已配置的远程仓库信息"""
+        res = run_git(["remote", "-v"], cwd=self.repo_path)
+        remotes = []
+        if res.success and res.stdout:
+            for line in res.stdout.splitlines():
+                parts = line.strip().split()
+                if len(parts) >= 3:
+                    remotes.append({
+                        "name": parts[0],
+                        "url": parts[1],
+                        "type": parts[2].strip("()")
+                    })
+        return remotes
+
+    def set_remote_origin(self, url: str) -> Tuple[bool, str]:
+        """设置或更新 origin 远程仓库地址"""
+        url = url.strip()
+        if not url:
+            return False, "Remote URL cannot be empty."
+        remotes_res = run_git(["remote"], cwd=self.repo_path)
+        has_origin = "origin" in remotes_res.stdout.split()
+        if has_origin:
+            res = run_git(["remote", "set-url", "origin", url], cwd=self.repo_path)
+        else:
+            res = run_git(["remote", "add", "origin", url], cwd=self.repo_path)
+
+        if res.success:
+            self._cached_remote_url = url
+            return True, f"✅ {t('remote_set_success', url=url)}"
+        return False, f"❌ {res.stderr or res.stdout}"
+
+    def test_remote_connection(self) -> Tuple[bool, str]:
+        """轻量探测远端网络连通性与读写鉴权"""
+        info = self.get_info()
+        if not info["remote_url"]:
+            return False, f"⚠️ {t('pull_no_remote')}"
+        res = run_git(["ls-remote", "--exit-code", "-h", "origin"], cwd=self.repo_path)
+        if res.success:
+            return True, f"✅ {t('remote_test_success')}"
+        return False, f"❌ {t('remote_test_failed', error=res.stderr or res.stdout)}"
+
+    def get_diff(self, staged: bool = False, file_path: Optional[str] = None, color: bool = False) -> str:
+        """获取工作区或暂存区的代码修改差异 (diff)"""
+        cmd = ["diff"]
+        if color:
+            cmd.append("--color=always")
+        if staged:
+            cmd.append("--staged")
+        if file_path:
+            cmd.extend(["--", file_path])
+        res = run_git(cmd, cwd=self.repo_path)
+        return res.stdout if res.success else ""
+
+    def get_commit_detail(self, commit_hash: str) -> str:
+        """获取具体某次提交的详细改动与元数据"""
+        res = run_git(["show", "--stat", "-p", commit_hash.strip()], cwd=self.repo_path)
+        return res.stdout if res.success else res.stderr
+
+    def get_discardable_files(self) -> List[Dict[str, str]]:
+        """获取所有可丢弃改动的文件清单及状态 (用于序号选择丢弃)"""
+        info = self.get_info()
+        files = []
+        seen = set()
+        for f in info["modified"]:
+            if f not in seen:
+                files.append({"path": f, "status": "M"})
+                seen.add(f)
+        for f in info["staged"]:
+            if f not in seen:
+                files.append({"path": f, "status": "A"})
+                seen.add(f)
+        for f in info["untracked"]:
+            if f not in seen:
+                files.append({"path": f, "status": "?"})
+                seen.add(f)
+        return files
 
 
 def scan_multi_repos(base_dir: str = ".", max_depth: int = 3) -> List[Dict[str, Any]]:

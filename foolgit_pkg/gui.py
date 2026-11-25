@@ -2,6 +2,7 @@
 FoolGit 极简图形化交互界面 (GUI) - PyQt6 版本
 高质感黑灰极简程序员科技风 (Dark/Gray Minimalist Aesthetic)
 纯净多语言支持，彻底杜绝中英文混杂。
+动态渲染全部官方预设与自定义命令，拥有全套专属暗色弹窗。
 """
 
 import os
@@ -13,12 +14,12 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QLineEdit, QComboBox,
     QTextEdit, QFrame, QDialog, QCheckBox, QMessageBox, QInputDialog,
-    QScrollArea, QGraphicsDropShadowEffect
+    QScrollArea, QListWidget, QListWidgetItem, QGraphicsDropShadowEffect
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QFont, QColor, QIcon
+from PyQt6.QtGui import QFont, QColor
 
-from .core import GitEngine, is_git_repo, run_git
+from .core import GitEngine, is_git_repo, run_git, scan_multi_repos
 from .config import ConfigManager
 from .presets import get_preset_info, ALL_PRESET_IDS
 from .i18n import t, set_language, get_language
@@ -103,7 +104,7 @@ QPushButton#SyncButton:pressed {
     background-color: #047857;
 }
 
-/* 后悔药按钮 (Danger Accent) */
+/* 后悔药/危险按钮 (Danger Accent) */
 QPushButton#UndoButton {
     background-color: #2A1D20;
     color: #F87171;
@@ -189,6 +190,26 @@ QTextEdit#LogConsole {
     padding: 8px;
 }
 
+/* 列表控件 */
+QListWidget {
+    background-color: #0A0A0C;
+    border: 1px solid #2B2C32;
+    border-radius: 8px;
+    color: #E4E7EB;
+    padding: 4px;
+}
+QListWidget::item {
+    padding: 6px 10px;
+    border-radius: 5px;
+}
+QListWidget::item:selected {
+    background-color: #27282D;
+    color: #FFFFFF;
+}
+QListWidget::item:hover {
+    background-color: #1F2024;
+}
+
 /* 状态胶囊 */
 QLabel#StatusPill {
     padding: 4px 10px;
@@ -202,7 +223,6 @@ QLabel#StatusPill {
 class GitTaskThread(QThread):
     """异步执行 Git 操作的后台工作线程"""
     finished_signal = pyqtSignal(bool, list)
-    single_msg_signal = pyqtSignal(str)
 
     def __init__(self, target_func):
         super().__init__()
@@ -228,8 +248,8 @@ class FoolGitMainWindow(QMainWindow):
         self.engine = GitEngine(self.target_dir)
 
         self.setWindowTitle("FoolGit")
-        self.resize(540, 750)
-        self.setMinimumSize(480, 640)
+        self.resize(560, 780)
+        self.setMinimumSize(500, 680)
 
         # 检查是否为 Git 仓库
         if not is_git_repo(self.target_dir):
@@ -237,6 +257,7 @@ class FoolGitMainWindow(QMainWindow):
 
         self._setup_ui()
         self.refresh_status()
+        self._render_quick_actions()
 
     def _setup_ui(self):
         """构建整体界面布局"""
@@ -288,7 +309,7 @@ class FoolGitMainWindow(QMainWindow):
         repo_row.addStretch()
 
         self.branch_combo = QComboBox()
-        self.branch_combo.setMinimumWidth(130)
+        self.branch_combo.setMinimumWidth(140)
         self.branch_combo.currentTextChanged.connect(self._on_branch_changed)
         repo_row.addWidget(self.branch_combo)
 
@@ -340,60 +361,36 @@ class FoolGitMainWindow(QMainWindow):
         root_layout.addWidget(sync_card)
 
         # ─────────────────────────────────────────────────────
-        # 3. 常用高频快捷操作 (2x2 Grid)
+        # 3. 动态快捷操作区 (Dynamic Quick Actions Grid)
         # ─────────────────────────────────────────────────────
         actions_card = QFrame()
         actions_card.setProperty("class", "CardFrame")
-        act_layout = QVBoxLayout(actions_card)
-        act_layout.setContentsMargins(16, 12, 16, 14)
-        act_layout.setSpacing(10)
+        self.act_layout = QVBoxLayout(actions_card)
+        self.act_layout.setContentsMargins(16, 12, 16, 14)
+        self.act_layout.setSpacing(10)
 
         self.lbl_act_section = QLabel(t("gui_quick_actions").upper())
         self.lbl_act_section.setProperty("class", "SectionTitle")
-        act_layout.addWidget(self.lbl_act_section)
+        self.act_layout.addWidget(self.lbl_act_section)
 
-        grid_layout = QGridLayout()
-        grid_layout.setSpacing(8)
+        self.grid_widget = QWidget()
+        self.grid_layout = QGridLayout(self.grid_widget)
+        self.grid_layout.setContentsMargins(0, 0, 0, 0)
+        self.grid_layout.setSpacing(8)
+        self.act_layout.addWidget(self.grid_widget)
 
-        self.btn_pull = QPushButton("⬇️  " + t("preset_pull_name"))
-        self.btn_pull.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_pull.clicked.connect(self._action_pull)
-        grid_layout.addWidget(self.btn_pull, 0, 0)
-
-        self.btn_status = QPushButton("🔍  " + t("preset_status_name"))
-        self.btn_status.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_status.clicked.connect(self._action_status)
-        grid_layout.addWidget(self.btn_status, 0, 1)
-
-        self.btn_undo = QPushButton("💊  " + t("preset_undo_name"))
-        self.btn_undo.setObjectName("UndoButton")
-        self.btn_undo.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_undo.clicked.connect(self._action_undo_dialog)
-        grid_layout.addWidget(self.btn_undo, 1, 0)
-
-        self.btn_stash = QPushButton("📦  " + t("preset_stash_name"))
-        self.btn_stash.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_stash.clicked.connect(self._action_stash_dialog)
-        grid_layout.addWidget(self.btn_stash, 1, 1)
-
-        act_layout.addLayout(grid_layout)
         root_layout.addWidget(actions_card)
 
         # ─────────────────────────────────────────────────────
-        # 4. 工具栏 (History, Diff, Settings)
+        # 4. 工具栏 (Refresh, Settings)
         # ─────────────────────────────────────────────────────
         tools_row = QHBoxLayout()
         tools_row.setSpacing(8)
 
-        self.btn_history = QPushButton("📜 " + t("preset_history_name"))
-        self.btn_history.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_history.clicked.connect(self._action_history)
-        tools_row.addWidget(self.btn_history)
-
-        self.btn_diff = QPushButton("🔍 " + t("preset_diff_name"))
-        self.btn_diff.setCursor(Qt.CursorShape.PointingHandCursor)
-        self.btn_diff.clicked.connect(self._action_diff)
-        tools_row.addWidget(self.btn_diff)
+        self.btn_refresh = QPushButton("🔄 " + ("Refresh" if get_language() == "en" else "刷新状态"))
+        self.btn_refresh.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_refresh.clicked.connect(self.refresh_status)
+        tools_row.addWidget(self.btn_refresh)
 
         self.btn_settings = QPushButton("⚙️ " + t("settings_btn"))
         self.btn_settings.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -418,6 +415,57 @@ class FoolGitMainWindow(QMainWindow):
         term_layout.addWidget(self.txt_console)
 
         root_layout.addWidget(term_frame, stretch=1)
+
+    # ─────────────────────────────────────────────────────────
+    # 动态渲染快捷操作卡片
+    # ─────────────────────────────────────────────────────────
+
+    def _render_quick_actions(self):
+        """动态构建与渲染所有已启用的功能卡片和自定义命令"""
+        # 清除现有按钮
+        while self.grid_layout.count():
+            item = self.grid_layout.takeAt(0)
+            widget = item.widget()
+            if widget:
+                widget.deleteLater()
+
+        active_ids = [pid for pid in self.config_mgr.get_active_preset_ids() if pid != "sync"]
+        custom_cmds = self.config_mgr.get_custom_commands()
+
+        preset_handlers = {
+            "pull": ("⬇️", t("preset_pull_name"), self._action_pull, None),
+            "status": ("🔍", t("preset_status_name"), self._action_status, None),
+            "undo": ("💊", t("preset_undo_name"), self._action_undo_dialog, "UndoButton"),
+            "stash": ("📦", t("preset_stash_name"), self._action_stash_dialog, None),
+            "history": ("📜", t("preset_history_name"), self._action_history_dialog, None),
+            "diff": ("🔍", t("preset_diff_name"), self._action_diff_dialog, None),
+            "clean": ("🧹", t("preset_clean_name"), self._action_clean_dialog, None),
+            "tag": ("🏷️", t("preset_tag_name"), self._action_tag_dialog, None),
+            "remote": ("🌐", t("preset_remote_name"), self._action_remote_dialog, None),
+            "multi_sync": ("🔄", t("preset_multi_sync_name"), self._action_multi_sync_dialog, None),
+        }
+
+        items = []
+        for pid in active_ids:
+            if pid in preset_handlers:
+                icon, name, handler, style_id = preset_handlers[pid]
+                items.append((icon, name, handler, style_id))
+
+        for c_cmd in custom_cmds:
+            cmd_text = c_cmd["cmd"]
+            def make_handler(cmd):
+                return lambda: self._run_custom_command(cmd)
+            items.append(("⚡", c_cmd["name"], make_handler(cmd_text), None))
+
+        for idx, (icon, name, handler, style_id) in enumerate(items):
+            btn = QPushButton(f"{icon}  {name}")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            if style_id:
+                btn.setObjectName(style_id)
+            btn.clicked.connect(handler)
+            row = idx // 2
+            col = idx % 2
+            self.grid_layout.addWidget(btn, row, col)
 
     # ─────────────────────────────────────────────────────────
     # 状态刷新与异步工作流
@@ -495,13 +543,9 @@ class FoolGitMainWindow(QMainWindow):
         self.txt_commit.setPlaceholderText(t("gui_commit_placeholder"))
         self.btn_sync.setText("🚀  " + t("preset_sync_name"))
         self.lbl_act_section.setText(t("gui_quick_actions").upper())
-        self.btn_pull.setText("⬇️  " + t("preset_pull_name"))
-        self.btn_status.setText("🔍  " + t("preset_status_name"))
-        self.btn_undo.setText("💊  " + t("preset_undo_name"))
-        self.btn_stash.setText("📦  " + t("preset_stash_name"))
-        self.btn_history.setText("📜 " + t("preset_history_name"))
-        self.btn_diff.setText("🔍 " + t("preset_diff_name"))
+        self.btn_refresh.setText("🔄 " + ("Refresh" if get_language() == "en" else "刷新状态"))
         self.btn_settings.setText("⚙️ " + t("settings_btn"))
+        self._render_quick_actions()
         self.refresh_status()
 
     def _toggle_language(self):
@@ -511,7 +555,7 @@ class FoolGitMainWindow(QMainWindow):
         self.log(f"> {t('lang_changed')}")
 
     # ─────────────────────────────────────────────────────────
-    # 业务动作
+    # 业务动作与专属暗黑弹窗
     # ─────────────────────────────────────────────────────────
 
     def _action_sync(self):
@@ -558,10 +602,10 @@ class FoolGitMainWindow(QMainWindow):
                 self.log("\n" + stat)
 
     def _action_undo_dialog(self):
-        """极简后悔药弹窗"""
+        """极简后悔药弹窗（支持全部撤销、撤销提交、按文件丢弃）"""
         dialog = QDialog(self)
         dialog.setWindowTitle(t("undo_title").replace(":", ""))
-        dialog.setFixedWidth(380)
+        dialog.setFixedSize(450, 440)
         dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
 
         d_layout = QVBoxLayout(dialog)
@@ -569,28 +613,62 @@ class FoolGitMainWindow(QMainWindow):
         d_layout.setSpacing(12)
 
         title = QLabel(t("undo_title"))
-        title.setFont(QFont("Helvetica", 13, QFont.Weight.Bold))
+        title.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
         title.setStyleSheet("color: #EF4444;")
         d_layout.addWidget(title)
 
-        btn_all = QPushButton(t("undo_opt_all"))
+        btn_all = QPushButton("⚠️  " + t("undo_opt_all"))
         btn_all.setObjectName("UndoButton")
         btn_all.setCursor(Qt.CursorShape.PointingHandCursor)
         d_layout.addWidget(btn_all)
 
-        btn_uncommit = QPushButton(t("undo_opt_commit"))
+        btn_uncommit = QPushButton("↩️  " + t("undo_opt_commit"))
         btn_uncommit.setCursor(Qt.CursorShape.PointingHandCursor)
         d_layout.addWidget(btn_uncommit)
 
+        # 按文件丢弃
+        sep = QFrame()
+        sep.setFrameShape(QFrame.Shape.HLine)
+        sep.setStyleSheet("color: #2B2C32;")
+        d_layout.addWidget(sep)
+
+        lbl_file = QLabel(t("gui_select_file_hint"))
+        lbl_file.setProperty("class", "Muted")
+        d_layout.addWidget(lbl_file)
+
+        discard_list = QListWidget()
+        discardable = self.engine.get_discardable_files()
+        if not discardable:
+            item = QListWidgetItem(t("discard_file_no_changes"))
+            item.setFlags(Qt.ItemFlag.NoItemFlags)
+            discard_list.addItem(item)
+        else:
+            for f in discardable:
+                item = QListWidgetItem(f"[{f['status']}]  {f['path']}")
+                item.setData(Qt.ItemDataRole.UserRole, f["path"])
+                if f["status"] == "M":
+                    item.setForeground(QColor("#FBBF24"))
+                elif f["status"] == "A":
+                    item.setForeground(QColor("#34D399"))
+                else:
+                    item.setForeground(QColor("#38BDF8"))
+                discard_list.addItem(item)
+
+        d_layout.addWidget(discard_list, stretch=1)
+
+        btn_discard_file = QPushButton("🗑️  " + t("gui_discard_selected_btn"))
+        btn_discard_file.setObjectName("UndoButton")
+        btn_discard_file.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_discard_file.setEnabled(len(discardable) > 0)
+        d_layout.addWidget(btn_discard_file)
+
         def do_all():
-            dialog.accept()
             reply = QMessageBox.question(
-                self,
-                "Confirm",
-                t("discard_all_confirm"),
+                dialog, "Confirm", t("discard_all_confirm"),
                 QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
             )
             if reply == QMessageBox.StandardButton.Yes:
+                dialog.accept()
                 ok, msg = self.engine.undo_action("discard_all")
                 self.log(f"> {msg}")
                 self.refresh_status()
@@ -601,15 +679,33 @@ class FoolGitMainWindow(QMainWindow):
             self.log(f"> {msg}")
             self.refresh_status()
 
+        def do_discard_file():
+            curr = discard_list.currentItem()
+            if not curr:
+                return
+            target_path = curr.data(Qt.ItemDataRole.UserRole)
+            if not target_path:
+                return
+            reply = QMessageBox.question(
+                dialog, "Confirm", t("discard_file_confirm", target=target_path),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                dialog.accept()
+                ok, msg = self.engine.undo_action("discard_file", target=target_path)
+                self.log(f"> {msg}")
+                self.refresh_status()
+
         btn_all.clicked.connect(do_all)
         btn_uncommit.clicked.connect(do_uncommit)
+        btn_discard_file.clicked.connect(do_discard_file)
         dialog.exec()
 
     def _action_stash_dialog(self):
         """暂存箱弹窗"""
         dialog = QDialog(self)
         dialog.setWindowTitle(t("stash_title").replace(":", ""))
-        dialog.setFixedWidth(380)
+        dialog.setFixedWidth(400)
         dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
 
         d_layout = QVBoxLayout(dialog)
@@ -617,14 +713,14 @@ class FoolGitMainWindow(QMainWindow):
         d_layout.setSpacing(12)
 
         title = QLabel(t("stash_title"))
-        title.setFont(QFont("Helvetica", 13, QFont.Weight.Bold))
+        title.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
         d_layout.addWidget(title)
 
-        btn_save = QPushButton(t("stash_opt_save"))
+        btn_save = QPushButton("📦  " + t("stash_opt_save"))
         btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
         d_layout.addWidget(btn_save)
 
-        btn_pop = QPushButton(t("stash_opt_pop"))
+        btn_pop = QPushButton("📂  " + t("stash_opt_pop"))
         btn_pop.setCursor(Qt.CursorShape.PointingHandCursor)
         d_layout.addWidget(btn_pop)
 
@@ -644,28 +740,465 @@ class FoolGitMainWindow(QMainWindow):
         btn_pop.clicked.connect(do_pop)
         dialog.exec()
 
-    def _action_history(self):
-        """查看最近 10 次提交"""
-        hist = self.engine.get_recent_history(10)
-        self.log(f"\n> ─── {t('history_title')} ───")
-        if not hist:
-            self.log(f"  {t('no_history')}")
-        else:
-            for item in hist:
-                parts = item.split("|")
-                if len(parts) >= 4:
-                    self.log(f"  {parts[0]} - {parts[3]} ({parts[2]} by {parts[1]})")
-                else:
-                    self.log(f"  {item}")
+    def _action_clean_dialog(self):
+        """清理未跟踪垃圾文件弹窗"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(t("gui_clean_manager"))
+        dialog.setFixedSize(480, 420)
+        dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
 
-    def _action_diff(self):
-        """查看 Diff 代码改动"""
-        res = run_git(["diff"], cwd=self.engine.repo_path)
-        self.log(f"\n> ─── {t('diff_title')} ───")
-        if res.stdout:
-            self.log(res.stdout)
+        d_layout = QVBoxLayout(dialog)
+        d_layout.setContentsMargins(20, 18, 20, 18)
+        d_layout.setSpacing(12)
+
+        title = QLabel(t("clean_title"))
+        title.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
+        d_layout.addWidget(title)
+
+        preview = self.engine.clean_preview()
+        if not preview:
+            lbl_clean = QLabel("✨  " + t("clean_nothing"))
+            lbl_clean.setStyleSheet("color: #10B981; font-size: 13px; font-weight: 600; padding: 30px 0;")
+            d_layout.addWidget(lbl_clean, alignment=Qt.AlignmentFlag.AlignCenter)
+            btn_close = QPushButton("OK")
+            btn_close.clicked.connect(dialog.accept)
+            d_layout.addWidget(btn_close)
         else:
-            self.log(f"  {t('no_diff')}")
+            lbl_hint = QLabel(t("clean_preview_title"))
+            lbl_hint.setProperty("class", "Muted")
+            d_layout.addWidget(lbl_hint)
+
+            clean_list = QListWidget()
+            for p in preview:
+                clean_list.addItem(f"🗑️  {p}")
+            d_layout.addWidget(clean_list, stretch=1)
+
+            btn_clean = QPushButton("🔥  " + t("gui_clean_now_btn"))
+            btn_clean.setObjectName("UndoButton")
+            btn_clean.setCursor(Qt.CursorShape.PointingHandCursor)
+
+            def do_clean():
+                dialog.accept()
+                ok, msg = self.engine.clean_execute()
+                self.log(f"> {msg}")
+                self.refresh_status()
+
+            btn_clean.clicked.connect(do_clean)
+            d_layout.addWidget(btn_clean)
+
+        dialog.exec()
+
+    def _action_tag_dialog(self):
+        """版本标签管理弹窗"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(t("gui_tag_manager"))
+        dialog.setFixedSize(500, 520)
+        dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
+
+        d_layout = QVBoxLayout(dialog)
+        d_layout.setContentsMargins(20, 18, 20, 18)
+        d_layout.setSpacing(12)
+
+        title = QLabel(t("tag_title"))
+        title.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
+        d_layout.addWidget(title)
+
+        # 新建标签输入行
+        create_box = QFrame()
+        create_box.setProperty("class", "CardFrame")
+        c_layout = QVBoxLayout(create_box)
+        c_layout.setContentsMargins(12, 10, 12, 10)
+        c_layout.setSpacing(8)
+
+        txt_tag = QLineEdit()
+        txt_tag.setPlaceholderText(t("tag_name_prompt"))
+        c_layout.addWidget(txt_tag)
+
+        txt_msg = QLineEdit()
+        txt_msg.setPlaceholderText(t("tag_msg_prompt"))
+        c_layout.addWidget(txt_msg)
+
+        cb_push = QCheckBox(t("tag_push_prompt").split("?")[0] + "?")
+        cb_push.setChecked(True)
+        c_layout.addWidget(cb_push)
+
+        btn_create = QPushButton("🏷️  " + t("gui_new_tag_btn"))
+        btn_create.setStyleSheet("background-color: #10B981; color: #FFFFFF;")
+        btn_create.setCursor(Qt.CursorShape.PointingHandCursor)
+        c_layout.addWidget(btn_create)
+
+        d_layout.addWidget(create_box)
+
+        # 标签列表
+        lbl_list = QLabel(t("tag_opt_list"))
+        lbl_list.setProperty("class", "SectionTitle")
+        d_layout.addWidget(lbl_list)
+
+        tag_list = QListWidget()
+        def reload_tags():
+            tag_list.clear()
+            tags = self.engine.list_tags()
+            if not tags:
+                tag_list.addItem(t("tag_none_found"))
+            else:
+                for tg in tags:
+                    tag_list.addItem(f"🏷️  {tg}")
+
+        reload_tags()
+        d_layout.addWidget(tag_list, stretch=1)
+
+        # 底部操作行
+        bot_row = QHBoxLayout()
+        btn_del = QPushButton("❌  " + t("gui_delete_tag_btn"))
+        btn_del.setObjectName("UndoButton")
+        btn_del.setCursor(Qt.CursorShape.PointingHandCursor)
+        bot_row.addWidget(btn_del)
+
+        btn_push_all = QPushButton("🚀  " + t("gui_push_tags_btn"))
+        btn_push_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        bot_row.addWidget(btn_push_all)
+
+        d_layout.addLayout(bot_row)
+
+        def do_create():
+            name = txt_tag.text().strip()
+            if not name:
+                return
+            msg = txt_msg.text().strip()
+            ok, res_msg = self.engine.create_tag(name, msg, push=cb_push.isChecked())
+            self.log(f"> {res_msg}")
+            txt_tag.clear()
+            txt_msg.clear()
+            reload_tags()
+
+        def do_delete():
+            curr = tag_list.currentItem()
+            if not curr:
+                return
+            tname = curr.text().replace("🏷️", "").strip()
+            if not tname or tname == t("tag_none_found"):
+                return
+            remote_yn = QMessageBox.question(
+                dialog, "Delete Remote", t("tag_delete_remote_confirm"),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            ok, res_msg = self.engine.delete_tag(tname, remote=(remote_yn == QMessageBox.StandardButton.Yes))
+            self.log(f"> {res_msg}")
+            reload_tags()
+
+        def do_push_all():
+            ok, res_msg = self.engine.push_all_tags()
+            self.log(f"> {res_msg}")
+
+        btn_create.clicked.connect(do_create)
+        btn_del.clicked.connect(do_delete)
+        btn_push_all.clicked.connect(do_push_all)
+
+        dialog.exec()
+
+    def _action_remote_dialog(self):
+        """远程仓库设置弹窗"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(t("gui_remote_manager"))
+        dialog.setFixedSize(520, 440)
+        dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
+
+        d_layout = QVBoxLayout(dialog)
+        d_layout.setContentsMargins(20, 18, 20, 18)
+        d_layout.setSpacing(12)
+
+        title = QLabel(t("remote_title"))
+        title.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
+        d_layout.addWidget(title)
+
+        curr_url = self.engine.get_remote_url()
+        lbl_curr = QLabel(t("remote_origin_label", url=curr_url if curr_url else t("remote_none")))
+        lbl_curr.setProperty("class", "Muted")
+        lbl_curr.setWordWrap(True)
+        d_layout.addWidget(lbl_curr)
+
+        # 编辑 URL
+        box = QFrame()
+        box.setProperty("class", "CardFrame")
+        b_layout = QVBoxLayout(box)
+        b_layout.setContentsMargins(12, 10, 12, 10)
+        b_layout.setSpacing(8)
+
+        lbl_edit = QLabel(t("remote_set_prompt"))
+        lbl_edit.setFont(QFont("Helvetica", 11, QFont.Weight.Bold))
+        b_layout.addWidget(lbl_edit)
+
+        txt_url = QLineEdit()
+        txt_url.setText(curr_url)
+        txt_url.setPlaceholderText("https://github.com/user/repo.git")
+        b_layout.addWidget(txt_url)
+
+        btn_save = QPushButton("💾  " + t("gui_set_origin_btn"))
+        btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
+        b_layout.addWidget(btn_save)
+
+        d_layout.addWidget(box)
+
+        # 连通性测试卡片
+        test_box = QFrame()
+        test_box.setProperty("class", "CardFrame")
+        t_layout = QHBoxLayout(test_box)
+        t_layout.setContentsMargins(12, 10, 12, 10)
+
+        btn_test = QPushButton("⚡  " + t("gui_test_conn_btn"))
+        btn_test.setCursor(Qt.CursorShape.PointingHandCursor)
+        t_layout.addWidget(btn_test)
+
+        lbl_test_result = QLabel("")
+        lbl_test_result.setWordWrap(True)
+        t_layout.addWidget(lbl_test_result, stretch=1)
+
+        d_layout.addWidget(test_box)
+
+        # 所有 remotes 文本框
+        lbl_all = QLabel(t("remote_opt_view"))
+        lbl_all.setProperty("class", "SectionTitle")
+        d_layout.addWidget(lbl_all)
+
+        txt_all = QTextEdit()
+        txt_all.setObjectName("LogConsole")
+        txt_all.setReadOnly(True)
+        txt_all.setFixedHeight(80)
+        remotes = self.engine.list_remotes()
+        if remotes:
+            for r in remotes:
+                txt_all.append(f"{r['name']}\t{r['url']} ({r['type']})")
+        else:
+            txt_all.append(t("remote_none"))
+        d_layout.addWidget(txt_all)
+
+        def do_save():
+            new_u = txt_url.text().strip()
+            if not new_u:
+                return
+            ok, msg = self.engine.set_remote_origin(new_u)
+            self.log(f"> {msg}")
+            lbl_curr.setText(t("remote_origin_label", url=new_u))
+            self.refresh_status()
+
+        def do_test():
+            lbl_test_result.setStyleSheet("color: #FBBF24;")
+            lbl_test_result.setText("Testing connection...")
+            ok, msg = self.engine.test_remote_connection()
+            if ok:
+                lbl_test_result.setStyleSheet("color: #34D399; font-weight: bold;")
+                lbl_test_result.setText("✓ Connected successfully!")
+            else:
+                lbl_test_result.setStyleSheet("color: #EF4444;")
+                lbl_test_result.setText("✗ " + msg)
+            self.log(f"> {msg}")
+
+        btn_save.clicked.connect(do_save)
+        btn_test.clicked.connect(do_test)
+
+        dialog.exec()
+
+    def _action_diff_dialog(self):
+        """代码差异对比弹窗 (高亮绿/红 diff)"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(t("gui_diff_viewer"))
+        dialog.resize(720, 540)
+        dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
+
+        d_layout = QVBoxLayout(dialog)
+        d_layout.setContentsMargins(18, 16, 18, 16)
+        d_layout.setSpacing(10)
+
+        top_row = QHBoxLayout()
+        lbl_t = QLabel(t("diff_menu_title"))
+        lbl_t.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
+        top_row.addWidget(lbl_t)
+
+        top_row.addStretch()
+
+        combo_mode = QComboBox()
+        combo_mode.addItem(t("gui_diff_mode_unstaged"), False)
+        combo_mode.addItem(t("gui_diff_mode_staged"), True)
+        top_row.addWidget(combo_mode)
+
+        combo_files = QComboBox()
+        combo_files.addItem(t("gui_diff_select_file"), "")
+        info = self.engine.get_info()
+        for f in list(dict.fromkeys(info["modified"] + info["staged"])):
+            combo_files.addItem(f, f)
+        top_row.addWidget(combo_files)
+
+        d_layout.addLayout(top_row)
+
+        txt_diff = QTextEdit()
+        txt_diff.setObjectName("LogConsole")
+        txt_diff.setReadOnly(True)
+        txt_diff.setFont(QFont("Menlo", 12))
+        d_layout.addWidget(txt_diff, stretch=1)
+
+        def update_diff():
+            staged = combo_mode.currentData()
+            fpath = combo_files.currentData()
+            raw = self.engine.get_diff(staged=staged, file_path=fpath if fpath else None, color=False)
+            txt_diff.clear()
+            if not raw:
+                txt_diff.append(f"<span style='color: #10B981;'>{t('no_diff')}</span>")
+                return
+
+            for line in raw.splitlines():
+                safe_l = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                if safe_l.startswith("+++") or safe_l.startswith("---"):
+                    txt_diff.append(f"<span style='color: #9CA3AF; font-weight: bold;'>{safe_l}</span>")
+                elif safe_l.startswith("+"):
+                    txt_diff.append(f"<span style='color: #34D399;'>{safe_l}</span>")
+                elif safe_l.startswith("-"):
+                    txt_diff.append(f"<span style='color: #F87171;'>{safe_l}</span>")
+                elif safe_l.startswith("@@"):
+                    txt_diff.append(f"<span style='color: #38BDF8;'>{safe_l}</span>")
+                else:
+                    txt_diff.append(f"<span style='color: #D1D5DB;'>{safe_l}</span>")
+
+        combo_mode.currentIndexChanged.connect(update_diff)
+        combo_files.currentIndexChanged.connect(update_diff)
+        update_diff()
+
+        dialog.exec()
+
+    def _action_history_dialog(self):
+        """提交历史及详情流水线弹窗"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(t("gui_history_viewer"))
+        dialog.resize(740, 560)
+        dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
+
+        d_layout = QVBoxLayout(dialog)
+        d_layout.setContentsMargins(18, 16, 18, 16)
+        d_layout.setSpacing(10)
+
+        title = QLabel(t("history_menu_title"))
+        title.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
+        d_layout.addWidget(title)
+
+        hist = self.engine.get_recent_history(25)
+
+        list_commits = QListWidget()
+        list_commits.setFixedHeight(180)
+
+        commit_map = {}
+        for item in hist:
+            parts = item.split("|")
+            if len(parts) >= 4:
+                h, author, when, msg = parts[0], parts[1], parts[2], parts[3]
+                display_text = f"{h}  ─  {msg}  ({when} by {author})"
+                commit_map[display_text] = h
+                list_commits.addItem(display_text)
+            else:
+                list_commits.addItem(item)
+
+        d_layout.addWidget(list_commits)
+
+        lbl_det = QLabel(t("gui_history_viewer"))
+        lbl_det.setProperty("class", "SectionTitle")
+        d_layout.addWidget(lbl_det)
+
+        txt_detail = QTextEdit()
+        txt_detail.setObjectName("LogConsole")
+        txt_detail.setReadOnly(True)
+        txt_detail.setFont(QFont("Menlo", 11))
+        d_layout.addWidget(txt_detail, stretch=1)
+
+        def on_commit_selected():
+            curr = list_commits.currentItem()
+            if not curr:
+                return
+            h = commit_map.get(curr.text())
+            if not h:
+                return
+            detail = self.engine.get_commit_detail(h)
+            txt_detail.clear()
+            for line in detail.splitlines():
+                safe_l = line.replace("&", "&amp;").replace("<", "&lt;").replace(">", "&gt;")
+                if safe_l.startswith("+"):
+                    txt_detail.append(f"<span style='color: #34D399;'>{safe_l}</span>")
+                elif safe_l.startswith("-"):
+                    txt_detail.append(f"<span style='color: #F87171;'>{safe_l}</span>")
+                elif safe_l.startswith("commit "):
+                    txt_detail.append(f"<span style='color: #FBBF24; font-weight: bold;'>{safe_l}</span>")
+                else:
+                    txt_detail.append(f"<span style='color: #D1D5DB;'>{safe_l}</span>")
+
+        list_commits.itemSelectionChanged.connect(on_commit_selected)
+        if list_commits.count() > 0:
+            list_commits.setCurrentRow(0)
+
+        dialog.exec()
+
+    def _action_multi_sync_dialog(self):
+        """多仓库扫描与批量同步弹窗"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(t("gui_multi_sync"))
+        dialog.resize(620, 500)
+        dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
+
+        d_layout = QVBoxLayout(dialog)
+        d_layout.setContentsMargins(20, 18, 20, 18)
+        d_layout.setSpacing(12)
+
+        repos = scan_multi_repos(self.target_dir)
+
+        title = QLabel(t("multi_repo_title", count=len(repos)))
+        title.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
+        d_layout.addWidget(title)
+
+        list_repos = QListWidget()
+        for r in repos:
+            clean_str = "✨ Clean" if r["is_clean"] else f"✎ {r['total_changes']} changed"
+            sync_str = f"↑{r['ahead']} ↓{r['behind']}" if r["has_upstream"] else "Local only"
+            list_repos.addItem(f"📁 {r['name']} [{r['branch']}]  ──  {clean_str}  ({sync_str})\n   {r['path']}")
+
+        d_layout.addWidget(list_repos, stretch=1)
+
+        btn_sync_all = QPushButton("🚀  " + t("multi_opt_all"))
+        btn_sync_all.setObjectName("SyncButton")
+        btn_sync_all.setCursor(Qt.CursorShape.PointingHandCursor)
+        d_layout.addWidget(btn_sync_all)
+
+        def do_sync_all():
+            btn_sync_all.setEnabled(False)
+            self.log(f"\n> ─── {t('multi_syncing', count=len(repos))} ───")
+            succ = 0
+            fail = 0
+            for r in repos:
+                self.log(f"> Syncing: {r['name']} ({r['branch']})...")
+                sub_engine = GitEngine(r["path"])
+                ok, logs = sub_engine.one_click_sync()
+                if ok:
+                    succ += 1
+                    self.log(f"  ✓ {r['name']} synced.")
+                else:
+                    fail += 1
+                    self.log(f"  ✗ {r['name']} sync error.")
+            self.log(f"> {t('multi_sync_summary', succ=succ, fail=fail)}")
+            self.refresh_status()
+            dialog.accept()
+
+        btn_sync_all.clicked.connect(do_sync_all)
+        dialog.exec()
+
+    def _run_custom_command(self, raw_cmd: str):
+        """执行自定义 Git 命令并实时回显日志"""
+        self.log(f"\n> ─── 🚀 Running: {raw_cmd} ───")
+        args = raw_cmd.replace("git ", "").split()
+        def job():
+            res = run_git(args, cwd=self.engine.repo_path)
+            lines = []
+            if res.stdout:
+                lines.append(res.stdout)
+            if res.stderr:
+                lines.append(res.stderr)
+            lines.append("✓ Done" if res.success else "✗ Failed")
+            return res.success, lines
+        self._run_in_background(job)
 
     def _on_branch_changed(self, branch_name: str):
         """切换分支"""
@@ -687,7 +1220,7 @@ class FoolGitMainWindow(QMainWindow):
         """功能库开关与个性化定制窗口"""
         dialog = QDialog(self)
         dialog.setWindowTitle(t("settings_title"))
-        dialog.setFixedSize(460, 520)
+        dialog.setFixedSize(480, 560)
         dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
 
         d_layout = QVBoxLayout(dialog)
@@ -725,6 +1258,7 @@ class FoolGitMainWindow(QMainWindow):
                         self.config_mgr.enable_preset(target_id)
                     else:
                         self.config_mgr.disable_preset(target_id)
+                    self._render_quick_actions()
                     self.refresh_status()
                 return on_state_changed
 
@@ -733,6 +1267,25 @@ class FoolGitMainWindow(QMainWindow):
 
         scroll.setWidget(scroll_widget)
         d_layout.addWidget(scroll)
+
+        # 添加自定义命令按钮
+        btn_add_cmd = QPushButton("➕ " + t("settings_opt_add_custom"))
+        btn_add_cmd.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        def do_add_cmd():
+            name_text, ok1 = QInputDialog.getText(dialog, "Custom Command", t("custom_name_prompt"))
+            if not ok1 or not name_text.strip():
+                return
+            cmd_text, ok2 = QInputDialog.getText(dialog, "Custom Command", t("custom_cmd_prompt"))
+            if not ok2 or not cmd_text.strip():
+                return
+            desc_text, _ = QInputDialog.getText(dialog, "Custom Command", t("custom_desc_prompt"))
+            self.config_mgr.add_custom_command(name_text.strip(), cmd_text.strip(), desc_text.strip() if desc_text else "")
+            self._render_quick_actions()
+            self.log(f"> {t('custom_added', name=name_text)}")
+
+        btn_add_cmd.clicked.connect(do_add_cmd)
+        d_layout.addWidget(btn_add_cmd)
 
         # 重置按钮
         btn_reset = QPushButton(t("settings_opt_reset"))
@@ -744,6 +1297,7 @@ class FoolGitMainWindow(QMainWindow):
             if reply == QMessageBox.StandardButton.Yes:
                 self.config_mgr.reset_to_defaults()
                 dialog.accept()
+                self._render_quick_actions()
                 self.refresh_status()
                 self.log(f"> {t('reset_done')}")
 
@@ -763,14 +1317,13 @@ class FoolGitMainWindow(QMainWindow):
         if reply == QMessageBox.StandardButton.Yes:
             res = run_git(["init"], cwd=self.target_dir)
             if res.success:
-                QMessageBox.showinfo("Success", "Git repository initialized successfully!")
+                QMessageBox.information(self, "Success", "Git repository initialized successfully!")
             else:
-                QMessageBox.critical("Error", f"Failed to initialize: {res.stderr}")
+                QMessageBox.critical(self, "Error", f"Failed to initialize: {res.stderr}")
 
 
 def launch_gui(target_dir: str = "."):
     """启动 PyQt6 极简图形应用"""
-    # 解决部分高分屏缩放问题
     os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = "1"
     app = QApplication(sys.argv)
     app.setStyleSheet(DARK_QSS)

@@ -301,10 +301,23 @@ class FoolGitCLI:
             ok, msg = engine.undo_action("uncommit")
             print(c(msg, GREEN if ok else RED))
         elif sub == "3":
-            fname = input(t("discard_file_prompt")).strip()
-            if fname:
-                ok, msg = engine.undo_action("discard_file", target=fname)
-                print(c(msg, GREEN if ok else RED))
+            discardable = engine.get_discardable_files()
+            if not discardable:
+                print(c(t("discard_file_no_changes"), YELLOW))
+            else:
+                print(f"\n{c('● ' + t('undo_opt_file'), BOLD)}")
+                for idx, f in enumerate(discardable, start=1):
+                    color = YELLOW if f["status"] == "M" else (GREEN if f["status"] == "A" else CYAN)
+                    print(f"  [{idx}] {c('[' + f['status'] + ']', color)} {f['path']}")
+                sel = input(f"\n{BOLD}{t('discard_file_select_prompt')}{RESET}").strip()
+                if sel.isdigit() and 1 <= int(sel) <= len(discardable):
+                    target_f = discardable[int(sel) - 1]["path"]
+                    confirm = input(c(t("discard_file_confirm", target=target_f), RED)).strip().lower()
+                    if confirm == "y":
+                        ok, msg = engine.undo_action("discard_file", target=target_f)
+                        print(c(msg, GREEN if ok else RED))
+                    else:
+                        print(c(t("cancelled"), YELLOW))
         prompt_press_enter()
 
     def _action_branch(self, engine: GitEngine):
@@ -318,16 +331,23 @@ class FoolGitCLI:
 
         print("\n" + t("branch_opt_switch"))
         print(t("branch_opt_new"))
+        print(t("branch_opt_delete"))
         print(f"  {t('back_to_main')}")
         print()
 
         sub = input(f"{BOLD}{t('branch_prompt')}{RESET}").strip()
-        if sub.lower() == "b":
+        if sub.lower() in ["b", ""]:
             return
         if sub.lower() == "n":
             new_b = input(t("new_branch_prompt")).strip()
             if new_b:
                 ok, msg = engine.create_and_switch_branch(new_b)
+                print(c(msg, GREEN if ok else RED))
+        elif sub.lower() == "d":
+            del_b = input(t("branch_delete_prompt")).strip()
+            if del_b:
+                force_yn = input(t("branch_delete_confirm", branch=del_b)).strip().lower()
+                ok, msg = engine.delete_branch(del_b, force=(force_yn == "y"))
                 print(c(msg, GREEN if ok else RED))
         elif sub.isdigit():
             idx = int(sub)
@@ -358,70 +378,176 @@ class FoolGitCLI:
         prompt_press_enter()
 
     def _action_history(self, engine: GitEngine):
-        """提交历史"""
+        """提交历史及详情查看"""
         hist = engine.get_recent_history(10)
-        print(c(f"📜 {t('history_title')}", BOLD + CYAN))
+        print(c(f"📜 {t('history_menu_title')}", BOLD + CYAN))
         if not hist:
             print(t("no_history"))
-        else:
-            for item in hist:
-                parts = item.split("|")
-                if len(parts) >= 4:
-                    h, author, when, msg = parts[0], parts[1], parts[2], parts[3]
-                    print(f" {c(h, YELLOW)} {BOLD}{msg}{RESET} {c('(' + when + ' by ' + author + ')', DIM)}")
-                else:
-                    print(f" {item}")
+            prompt_press_enter()
+            return
+
+        commit_hashes = []
+        for idx, item in enumerate(hist, start=1):
+            parts = item.split("|")
+            if len(parts) >= 4:
+                h, author, when, msg = parts[0], parts[1], parts[2], parts[3]
+                commit_hashes.append(h)
+                print(f"  [{idx}] {c(h, YELLOW)} {BOLD}{msg}{RESET} {c('(' + when + ' by ' + author + ')', DIM)}")
+            else:
+                commit_hashes.append(item.split()[0] if item.split() else "")
+                print(f"  [{idx}] {item}")
+
+        print()
+        inspect_choice = input(t("history_prompt_inspect", count=len(commit_hashes))).strip()
+        if inspect_choice.isdigit() and 1 <= int(inspect_choice) <= len(commit_hashes):
+            target_hash = commit_hashes[int(inspect_choice) - 1]
+            print()
+            print(c(f"─── {t('history_commit_detail_title', commit=target_hash)} ───", BOLD + CYAN))
+            detail = engine.get_commit_detail(target_hash)
+            print(detail)
+
         prompt_press_enter()
 
     def _action_diff(self, engine: GitEngine):
-        """代码差异"""
-        print(c(f"🔍 {t('diff_title')}", BOLD + CYAN))
-        res = run_git(["diff", "--color=always"], cwd=engine.repo_path)
-        if res.stdout:
-            print(res.stdout)
-        else:
-            print(c(t("no_diff"), GREEN))
+        """代码差异查看子菜单"""
+        print(c(f"🔍 {t('diff_menu_title')}", BOLD + CYAN))
+        print(f" {t('diff_opt_unstaged')}")
+        print(f" {t('diff_opt_staged')}")
+        print(f" {t('diff_opt_file')}")
+        print(f" {t('back_to_main')}")
+        print()
+
+        sub = input(f"{BOLD}{t('diff_prompt')}{RESET}").strip()
+        if sub == "1":
+            diff = engine.get_diff(staged=False, color=True)
+            if diff:
+                print(diff)
+            else:
+                print(c(t("no_diff"), GREEN))
+        elif sub == "2":
+            diff = engine.get_diff(staged=True, color=True)
+            if diff:
+                print(diff)
+            else:
+                print(c(t("no_diff"), GREEN))
+        elif sub == "3":
+            info = engine.get_info()
+            mod_files = list(dict.fromkeys(info["modified"] + info["staged"]))
+            if not mod_files:
+                print(c(t("diff_no_modified_files"), GREEN))
+            else:
+                for idx, f in enumerate(mod_files, start=1):
+                    print(f"  [{idx}] {f}")
+                f_sel = input(f"\n{BOLD}{t('diff_file_prompt')}{RESET}").strip()
+                if f_sel.isdigit() and 1 <= int(f_sel) <= len(mod_files):
+                    target_f = mod_files[int(f_sel) - 1]
+                    diff = engine.get_diff(file_path=target_f, color=True)
+                    if diff:
+                        print(diff)
+                    else:
+                        print(c(t("no_diff"), GREEN))
         prompt_press_enter()
 
     def _action_clean(self, engine: GitEngine):
         """清理未跟踪文件"""
+        print(c(f"🧹 {t('clean_title')}", BOLD + CYAN))
+        preview = engine.clean_preview()
+        if not preview:
+            print(c(f"✨ {t('clean_nothing')}", GREEN))
+            prompt_press_enter()
+            return
+
+        print(c(t("clean_preview_title"), YELLOW))
+        for p in preview:
+            print(f"  🗑️  {p}")
+        print()
         confirm = input(c(t("clean_confirm"), RED)).strip().lower()
         if confirm == "y":
-            res = run_git(["clean", "-fd"], cwd=engine.repo_path)
-            if res.success:
-                print(c(f"✅ {t('clean_success')}", GREEN))
-            else:
-                print(c(f"❌ {res.stderr}", RED))
+            ok, msg = engine.clean_execute()
+            print(c(msg, GREEN if ok else RED))
+        else:
+            print(c(t("cancelled"), YELLOW))
         prompt_press_enter()
 
     def _action_tag(self, engine: GitEngine):
-        """打标签"""
-        tag_name = input(t("tag_name_prompt")).strip()
-        if not tag_name:
-            return
-        tag_msg = input(t("tag_msg_prompt")).strip() or tag_name
-        res = run_git(["tag", "-a", tag_name, "-m", tag_msg], cwd=engine.repo_path)
-        if res.success:
-            print(c(f"✅ {t('tag_created', tag=tag_name)}", GREEN))
-            push_yn = input(t("tag_push_prompt")).strip().lower()
-            if push_yn != "n":
-                pres = run_git(["push", "origin", tag_name], cwd=engine.repo_path)
-                if pres.success:
-                    print(c(f"🎉 {t('tag_pushed', tag=tag_name)}", GREEN))
-                else:
-                    print(c(f"⚠️ {pres.stderr}", YELLOW))
-        else:
-            print(c(f"❌ {res.stderr}", RED))
+        """版本标签管理子菜单"""
+        print(c(f"🏷️  {t('tag_title')}", BOLD + CYAN))
+        print(f" {t('tag_opt_list')}")
+        print(f" {t('tag_opt_create')}")
+        print(f" {t('tag_opt_delete')}")
+        print(f" {t('tag_opt_push_all')}")
+        print(f" {t('back_to_main')}")
+        print()
+
+        sub = input(f"{BOLD}{t('tag_prompt')}{RESET}").strip()
+        if sub == "1":
+            tags = engine.list_tags()
+            if not tags:
+                print(c(t("tag_none_found"), YELLOW))
+            else:
+                for t_name in tags:
+                    print(f"  🏷️  {c(t_name, GREEN)}")
+        elif sub == "2":
+            tag_name = input(t("tag_name_prompt")).strip()
+            if tag_name:
+                tag_msg = input(t("tag_msg_prompt")).strip() or tag_name
+                push_yn = input(t("tag_push_prompt")).strip().lower()
+                ok, msg = engine.create_tag(tag_name, tag_msg, push=(push_yn != "n"))
+                print(c(msg, GREEN if ok else RED))
+        elif sub == "3":
+            tags = engine.list_tags()
+            if not tags:
+                print(c(t("tag_none_found"), YELLOW))
+            else:
+                for idx, t_name in enumerate(tags, start=1):
+                    print(f"  [{idx}] {t_name}")
+                t_sel = input(f"\n{BOLD}{t('tag_delete_prompt')}{RESET}").strip()
+                target_tag = ""
+                if t_sel.isdigit() and 1 <= int(t_sel) <= len(tags):
+                    target_tag = tags[int(t_sel) - 1]
+                elif t_sel in tags:
+                    target_tag = t_sel
+                if target_tag:
+                    rem_yn = input(t("tag_delete_remote_confirm")).strip().lower()
+                    ok, msg = engine.delete_tag(target_tag, remote=(rem_yn == "y"))
+                    print(c(msg, GREEN if ok else RED))
+        elif sub == "4":
+            ok, msg = engine.push_all_tags()
+            print(c(msg, GREEN if ok else RED))
         prompt_press_enter()
 
     def _action_remote(self, engine: GitEngine):
-        """查看远程仓库"""
-        res = run_git(["remote", "-v"], cwd=engine.repo_path)
+        """远程仓库设置子菜单"""
+        current_url = engine.get_remote_url()
         print(c(f"🌐 {t('remote_title')}", BOLD + CYAN))
-        if res.stdout:
-            print(res.stdout)
+        if current_url:
+            print(f"  {t('remote_origin_label', url=c(current_url, GREEN))}\n")
         else:
-            print(c(t("remote_none"), YELLOW))
+            print(f"  {c(t('remote_none'), YELLOW)}\n")
+
+        print(f" {t('remote_opt_view')}")
+        print(f" {t('remote_opt_set')}")
+        print(f" {t('remote_opt_test')}")
+        print(f" {t('back_to_main')}")
+        print()
+
+        sub = input(f"{BOLD}{t('remote_prompt')}{RESET}").strip()
+        if sub == "1":
+            remotes = engine.list_remotes()
+            if remotes:
+                for r in remotes:
+                    print(f"  {BOLD}{r['name']}{RESET} \t{r['url']} ({r['type']})")
+            else:
+                print(c(t("remote_none"), YELLOW))
+        elif sub == "2":
+            new_url = input(t("remote_set_prompt")).strip()
+            if new_url:
+                ok, msg = engine.set_remote_origin(new_url)
+                print(c(msg, GREEN if ok else RED))
+        elif sub == "3":
+            print("Testing connection...")
+            ok, msg = engine.test_remote_connection()
+            print(c(msg, GREEN if ok else RED))
         prompt_press_enter()
 
     def _action_multi_sync(self):
