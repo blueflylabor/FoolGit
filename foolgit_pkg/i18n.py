@@ -117,7 +117,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "undo_opt_all": "Discard ALL uncommitted changes (Restore clean workspace)",
         "undo_opt_commit": "Undo the last commit (Keep your edited code in workspace)",
         "undo_opt_file": "Discard changes in a specific file",
-        "undo_prompt": "Select undo level [1/2/3, b to return]: ",
+        "undo_opt_amend": "Edit the last commit message (rename last commit)",
+        "undo_prompt": "Select undo level [1/2/3/4, b to return]: ",
         "discard_all_confirm": "Are you sure you want to discard ALL uncommitted work? This cannot be undone! (type y to confirm): ",
         "discard_all_success": "All uncommitted changes discarded. Working tree restored to clean state!",
         "discard_file_success": "Discarded local changes in [{target}].",
@@ -150,15 +151,26 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "stash_title": "Stash Management:",
         "stash_opt_save": "Stash changes (Temporarily package unfinished work & clean workspace)",
         "stash_opt_pop": "Restore stash (Pop and re-apply latest stashed work)",
+        "stash_opt_list": "Browse stash list (View, apply or delete saved entries)",
         "stash_prompt": "Select option: ",
         "stash_note_prompt": "Optional note for stash (Press Enter for auto timestamp): ",
         "stash_clean_nothing": "No local changes to save. Stash not needed.",
         "stash_saved": "Code safely saved to stash! Working tree is clean.",
         "stash_popped": "Successfully restored stashed code changes!",
         "stash_empty": "Stash box is empty. No stashed changes found.",
+        "stash_applied": "Applied stash [{ref}] to working tree (entry kept in stash).",
+        "stash_dropped": "Deleted stash entry [{ref}] successfully.",
+        "stash_list_title": "Saved Stash Entries:",
+        "stash_list_empty": "No stash entries found.",
+        "stash_list_prompt": "Select entry number to manage, or 'b' to return: ",
+        "stash_entry_opt_apply": "[a] Apply (restore without deleting entry)",
+        "stash_entry_opt_drop": "[d] Delete this entry",
+        "stash_entry_opt_back": "[b] Back to stash list",
+        "stash_entry_prompt": "Action [a/d/b]: ",
 
         # Action: History & Clean & Tag & Remote & Diff
         "history_title": "Commit History Pipeline:",
+        "history_menu_title": "Commit History Pipeline:",
         "no_history": "No commit history found.",
         "history_prompt_inspect": "Enter commit number [1-{count}] to inspect full changes, or Enter to return: ",
         "history_commit_detail_title": "Commit Details [{commit}]:",
@@ -198,6 +210,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "remote_set_success": "Remote origin URL updated to: {url}",
         "remote_test_success": "Connection to remote repository verified successfully!",
         "remote_test_failed": "Connection failed: {error}",
+        "remote_testing": "Testing connection to remote repository...",
 
         "diff_menu_title": "Inspect Code Differences (Diff):",
         "diff_opt_unstaged": "[1] View unstaged changes (working tree edits)",
@@ -268,6 +281,37 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "preset_multi_sync_tag": "Batch",
         "preset_multi_sync_desc": "Scan and sync multiple Git repositories in batch",
 
+        "preset_gitignore_name": ".gitignore Quick Editor",
+        "preset_gitignore_tag": "Extra",
+        "preset_gitignore_desc": "View and add patterns to .gitignore without opening an editor",
+
+        # Amend commit
+        "amend_title": "Edit Last Commit Message:",
+        "amend_prompt": "Enter new commit message: ",
+        "amend_success": "Last commit message updated to: [{msg}]",
+        "amend_empty_msg": "Commit message cannot be empty.",
+
+        # Conflict rescue
+        "conflict_title": "Merge Conflict Detected:",
+        "conflict_files_label": "Files with conflicts:",
+        "conflict_opt_abort": "[a] Abort merge (restore to pre-merge state)",
+        "conflict_opt_back": "[b] Back (resolve manually in your editor)",
+        "conflict_prompt": "Action [a/b]: ",
+        "merge_abort_success": "Merge aborted. Repository restored to pre-merge state.",
+
+        # Gitignore editor
+        "gitignore_title": ".gitignore Quick Editor:",
+        "gitignore_current_label": "Current .gitignore contents:",
+        "gitignore_empty_file": "(empty — no .gitignore file found)",
+        "gitignore_add_prompt": "Enter pattern to add (e.g. *.log, node_modules/, .env): ",
+        "gitignore_added": "Added [{pattern}] to .gitignore",
+        "gitignore_already_exists": "Pattern [{pattern}] already exists in .gitignore",
+        "gitignore_empty_pattern": "Pattern cannot be empty.",
+
+        # Multi-repo comma selection
+        "multi_opt_comma": "[1,3,5] Select specific repos by number (comma-separated)",
+        "multi_syncing_selected": "Syncing {count} selected repositories...",
+
         # GUI Specific labels
         "gui_quick_actions": "Quick Actions",
         "gui_tools": "Tools & Settings",
@@ -291,6 +335,31 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "gui_diff_select_file": "All Files",
         "gui_discard_selected_btn": "Discard Selected File",
         "gui_select_file_hint": "Select a file to discard its changes:",
+
+        # GUI new features
+        "gui_stash_manager": "Stash Manager",
+        "gui_gitignore_editor": ".gitignore Editor",
+        "gui_branch_manager": "Branch Manager",
+        "gui_amend_commit": "Edit Last Commit",
+        "gui_conflict_rescue": "Conflict Rescue",
+        "gui_stash_list_label": "Saved stash entries:",
+        "gui_stash_apply_btn": "Apply Selected",
+        "gui_stash_drop_btn": "Delete Selected",
+        "gui_amend_prompt": "Enter new commit message:",
+        "gui_amend_btn": "Save New Message",
+        "gui_gitignore_content_label": "Current .gitignore:",
+        "gui_gitignore_add_btn": "Add Pattern",
+        "gui_gitignore_pattern_placeholder": "e.g. *.log, node_modules/, .env",
+        "gui_branch_list_label": "Local branches:",
+        "gui_branch_switch_btn": "Switch to Selected",
+        "gui_branch_create_btn": "Create New Branch",
+        "gui_branch_delete_btn": "Delete Branch",
+        "gui_new_branch_placeholder": "New branch name...",
+        "gui_commit_chip_feat": "feat:",
+        "gui_commit_chip_fix": "fix:",
+        "gui_commit_chip_docs": "docs:",
+        "gui_commit_chip_chore": "chore:",
+        "gui_commit_chip_refactor": "refactor:",
     },
 
     # ─────────────────────────────────────────────────────────────
@@ -402,7 +471,8 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "undo_opt_all": "放弃全部未提交的代码修改 (工作区彻底还原干净)",
         "undo_opt_commit": "撤回上一次提交 commit (代码依然保留在工作区)",
         "undo_opt_file": "放弃单个指定文件的修改",
-        "undo_prompt": "请选择后悔药级别 [1/2/3, b 返回]: ",
+        "undo_opt_amend": "修改上一次提交的说明文字 (改名上次提交)",
+        "undo_prompt": "请选择后悔药级别 [1/2/3/4, b 返回]: ",
         "discard_all_confirm": "确定要彻底放弃所有未提交的代码吗？该操作不可逆！(输入 y 确认): ",
         "discard_all_success": "已经丢弃所有未提交修改，工作区已恢复为干净状态！",
         "discard_file_success": "已经丢弃文件 [{target}] 的所有本地改动。",
@@ -435,15 +505,26 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "stash_title": "代码暂存箱管理 (Stash):",
         "stash_opt_save": "暂存存盘 (临时打包未写完的代码，工作区还原干净)",
         "stash_opt_pop": "取回恢复 (从暂存箱取回上一次保存的代码)",
+        "stash_opt_list": "查看暂存清单 (浏览、应用或删除已保存的暂存条目)",
         "stash_prompt": "请选择操作: ",
         "stash_note_prompt": "可选输入暂存备注 (直接回车默认时间): ",
         "stash_clean_nothing": "当前没有未保存的改动，暂存箱不需要存入。",
         "stash_saved": "代码已安全存入暂存箱！工作区已还原干净。",
         "stash_popped": "成功从暂存箱恢复上一次的代码改动！",
         "stash_empty": "暂存箱里空空如也，没有可恢复的存盘。",
+        "stash_applied": "已将暂存 [{ref}] 恢复到工作区（条目仍保留在暂存箱中）。",
+        "stash_dropped": "已成功删除暂存条目 [{ref}]。",
+        "stash_list_title": "已保存的暂存条目清单:",
+        "stash_list_empty": "暂存箱里没有任何条目。",
+        "stash_list_prompt": "输入条目编号进行操作，或输入 b 返回: ",
+        "stash_entry_opt_apply": "[a] 应用恢复 (还原代码到工作区，保留条目)",
+        "stash_entry_opt_drop": "[d] 删除该条目",
+        "stash_entry_opt_back": "[b] 返回暂存列表",
+        "stash_entry_prompt": "请选择操作 [a/d/b]: ",
 
         # Action: History & Clean & Tag & Remote & Diff
         "history_title": "提交历史流水线:",
+        "history_menu_title": "提交历史流水线:",
         "no_history": "暂无提交历史。",
         "history_prompt_inspect": "输入提交编号 [1-{count}] 查看具体改动详情，直接回车返回: ",
         "history_commit_detail_title": "提交版本详情 [{commit}]:",
@@ -483,6 +564,7 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "remote_set_success": "远程 origin 地址已更新为: {url}",
         "remote_test_success": "远程仓库连接测试成功！网络与权限均正常。",
         "remote_test_failed": "远程仓库连接失败: {error}",
+        "remote_testing": "正在测试远程仓库连通性，请稍候...",
 
         "diff_menu_title": "查看代码差异 (Diff):",
         "diff_opt_unstaged": "[1] 查看工作区未暂存的修改",
@@ -553,6 +635,37 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "preset_multi_sync_tag": "批量",
         "preset_multi_sync_desc": "扫描子目录下所有 Git 项目并进行批量一键同步",
 
+        "preset_gitignore_name": ".gitignore 快速编辑",
+        "preset_gitignore_tag": "扩展",
+        "preset_gitignore_desc": "快速查看并追加常用的 .gitignore 忽略规则",
+
+        # Amend commit
+        "amend_title": "修改上一次提交的说明文字:",
+        "amend_prompt": "请输入新的提交说明: ",
+        "amend_success": "上一次提交说明已成功修改为: [{msg}]",
+        "amend_empty_msg": "提交说明不能为空。",
+
+        # Conflict rescue
+        "conflict_title": "检测到 Merge 冲突:",
+        "conflict_files_label": "存在冲突的文件:",
+        "conflict_opt_abort": "[a] 中止合并 (还原到合并前的干净状态)",
+        "conflict_opt_back": "[b] 返回 (手动在编辑器中解决冲突)",
+        "conflict_prompt": "请选择操作 [a/b]: ",
+        "merge_abort_success": "合并已中止，仓库已恢复到合并前状态。",
+
+        # Gitignore editor
+        "gitignore_title": ".gitignore 快速编辑:",
+        "gitignore_current_label": "当前 .gitignore 文件内容:",
+        "gitignore_empty_file": "(空文件 — 未找到 .gitignore)",
+        "gitignore_add_prompt": "请输入要添加的规则 (如 *.log、node_modules/、.env): ",
+        "gitignore_added": "已将 [{pattern}] 添加到 .gitignore",
+        "gitignore_already_exists": "规则 [{pattern}] 已存在于 .gitignore 中",
+        "gitignore_empty_pattern": "规则不能为空。",
+
+        # Multi-repo comma selection
+        "multi_opt_comma": "[1,3,5] 按编号选择多个仓库 (用逗号分隔)",
+        "multi_syncing_selected": "正在同步已选中的 {count} 个仓库...",
+
         # GUI Specific labels
         "gui_quick_actions": "日常快捷操作",
         "gui_tools": "工具与设置",
@@ -576,6 +689,31 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "gui_diff_select_file": "全部文件",
         "gui_discard_selected_btn": "丢弃选中文件修改",
         "gui_select_file_hint": "选择要丢弃修改的文件:",
+
+        # GUI new features
+        "gui_stash_manager": "暂存箱管理",
+        "gui_gitignore_editor": ".gitignore 编辑",
+        "gui_branch_manager": "分支管理器",
+        "gui_amend_commit": "修改上次提交",
+        "gui_conflict_rescue": "冲突急救",
+        "gui_stash_list_label": "已保存的暂存条目:",
+        "gui_stash_apply_btn": "应用选中条目",
+        "gui_stash_drop_btn": "删除选中条目",
+        "gui_amend_prompt": "请输入新的提交说明文字:",
+        "gui_amend_btn": "保存新说明",
+        "gui_gitignore_content_label": "当前 .gitignore 文件:",
+        "gui_gitignore_add_btn": "添加规则",
+        "gui_gitignore_pattern_placeholder": "如 *.log、node_modules/、.env",
+        "gui_branch_list_label": "本地分支列表:",
+        "gui_branch_switch_btn": "切换到选中分支",
+        "gui_branch_create_btn": "新建并切换分支",
+        "gui_branch_delete_btn": "删除选中分支",
+        "gui_new_branch_placeholder": "输入新分支名称...",
+        "gui_commit_chip_feat": "功能:",
+        "gui_commit_chip_fix": "修复:",
+        "gui_commit_chip_docs": "文档:",
+        "gui_commit_chip_chore": "杂项:",
+        "gui_commit_chip_refactor": "重构:",
     }
 }
 

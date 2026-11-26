@@ -206,6 +206,8 @@ class FoolGitCLI:
             self._action_remote(engine)
         elif item_id == "multi_sync":
             self._action_multi_sync()
+        elif item_id == "gitignore":
+            self._action_gitignore(engine)
         else:
             print(c(f"Feature [{item_id}] not found.", RED))
             prompt_press_enter()
@@ -248,6 +250,20 @@ class FoolGitCLI:
             print(c(msg, GREEN))
         else:
             print(c(msg, RED if "❌" in msg else YELLOW))
+            conflicts = engine.get_conflict_files()
+            if conflicts:
+                print()
+                print(c(f"🚑 {t('conflict_title')}", BOLD + RED))
+                print(t("conflict_files_label"))
+                for cf in conflicts:
+                    print(f"  {c('!', RED)} {cf}")
+                print()
+                print(f" {t('conflict_opt_abort')}")
+                print(f" {t('conflict_opt_back')}")
+                ans = input(f"{BOLD}{t('conflict_prompt')}{RESET}").strip().lower()
+                if ans == "a":
+                    ab_ok, ab_msg = engine.abort_merge()
+                    print(c(ab_msg, GREEN if ab_ok else RED))
         prompt_press_enter()
 
     def _action_status(self, engine: GitEngine):
@@ -286,6 +302,7 @@ class FoolGitCLI:
         print(f" [1] {t('undo_opt_all')}")
         print(f" [2] {t('undo_opt_commit')}")
         print(f" [3] {t('undo_opt_file')}")
+        print(f" [4] {t('undo_opt_amend')}")
         print(f" {t('back_to_main')}")
         print()
 
@@ -318,6 +335,14 @@ class FoolGitCLI:
                         print(c(msg, GREEN if ok else RED))
                     else:
                         print(c(t("cancelled"), YELLOW))
+        elif sub == "4":
+            print(c(f"✏️  {t('amend_title')}", BOLD + CYAN))
+            new_msg = input(t("amend_prompt")).strip()
+            if new_msg:
+                ok, msg = engine.amend_commit_message(new_msg)
+                print(c(msg, GREEN if ok else RED))
+            else:
+                print(c(t("cancelled"), YELLOW))
         prompt_press_enter()
 
     def _action_branch(self, engine: GitEngine):
@@ -361,21 +386,65 @@ class FoolGitCLI:
 
     def _action_stash(self, engine: GitEngine):
         """暂存管理"""
-        print(c(f"📦 {t('stash_title')}", BOLD + CYAN))
-        print(f" [1] {t('stash_opt_save')}")
-        print(f" [2] {t('stash_opt_pop')}")
-        print(f" {t('back_to_main')}")
-        print()
+        while True:
+            print(c(f"📦 {t('stash_title')}", BOLD + CYAN))
+            print(f" [1] {t('stash_opt_save')}")
+            print(f" [2] {t('stash_opt_pop')}")
+            print(f" [3] {t('stash_opt_list')}")
+            print(f" {t('back_to_main')}")
+            print()
 
-        sub = input(f"{BOLD}{t('stash_prompt')}{RESET}").strip()
-        if sub == "1":
-            note = input(t("stash_note_prompt")).strip()
-            ok, msg = engine.stash_save(note)
-            print(c(msg, GREEN if ok else RED))
-        elif sub == "2":
-            ok, msg = engine.stash_pop()
-            print(c(msg, GREEN if ok else RED))
-        prompt_press_enter()
+            sub = input(f"{BOLD}{t('stash_prompt')}{RESET}").strip()
+            if sub.lower() in ["b", ""]:
+                break
+            elif sub == "1":
+                note = input(t("stash_note_prompt")).strip()
+                ok, msg = engine.stash_save(note)
+                print(c(msg, GREEN if ok else RED))
+                prompt_press_enter()
+            elif sub == "2":
+                ok, msg = engine.stash_pop()
+                print(c(msg, GREEN if ok else RED))
+                prompt_press_enter()
+            elif sub == "3":
+                self._action_stash_list(engine)
+            else:
+                print(c(t("invalid_choice"), RED))
+
+    def _action_stash_list(self, engine: GitEngine):
+        """查看 stash 列表并可应用/删除"""
+        while True:
+            stashes = engine.list_stashes()
+            print()
+            print(c(f"📋 {t('stash_list_title')}", BOLD + CYAN))
+            if not stashes:
+                print(c(t("stash_list_empty"), YELLOW))
+                prompt_press_enter()
+                return
+            for idx, s in enumerate(stashes, start=1):
+                print(f"  [{idx}] {c(s['ref'], YELLOW)} {s['desc']}")
+            print()
+            sel = input(f"{BOLD}{t('stash_list_prompt')}{RESET}").strip()
+            if sel.lower() in ["b", ""]:
+                break
+            if sel.isdigit() and 1 <= int(sel) <= len(stashes):
+                chosen_idx = int(sel) - 1
+                chosen = stashes[chosen_idx]
+                print(f"\n  {c(chosen['ref'], YELLOW)}: {chosen['desc']}")
+                print(f"  {t('stash_entry_opt_apply')}")
+                print(f"  {t('stash_entry_opt_drop')}")
+                print(f"  {t('stash_entry_opt_back')}")
+                action = input(f"{BOLD}{t('stash_entry_prompt')}{RESET}").strip().lower()
+                if action == "a":
+                    ok, msg = engine.stash_apply(chosen_idx)
+                    print(c(msg, GREEN if ok else RED))
+                    prompt_press_enter()
+                elif action == "d":
+                    ok, msg = engine.stash_drop(chosen_idx)
+                    print(c(msg, GREEN if ok else RED))
+                    prompt_press_enter()
+            else:
+                print(c(t("invalid_choice"), RED))
 
     def _action_history(self, engine: GitEngine):
         """提交历史及详情查看"""
@@ -545,7 +614,7 @@ class FoolGitCLI:
                 ok, msg = engine.set_remote_origin(new_url)
                 print(c(msg, GREEN if ok else RED))
         elif sub == "3":
-            print("Testing connection...")
+            print(t("remote_testing"))
             ok, msg = engine.test_remote_connection()
             print(c(msg, GREEN if ok else RED))
         prompt_press_enter()
@@ -553,6 +622,27 @@ class FoolGitCLI:
     def _action_multi_sync(self):
         """多仓库巡检与同步"""
         self._handle_multi_repo_view()
+
+    def _action_gitignore(self, engine: GitEngine):
+        """.gitignore 快速编辑器"""
+        while True:
+            print(c(f"🚫 {t('gitignore_title')}", BOLD + CYAN))
+            content = engine.get_gitignore_content()
+            if content:
+                print(c(t("gitignore_current_label"), BOLD))
+                for line in content.splitlines()[:30]:
+                    print(f"  {c(line, DIM)}")
+                if len(content.splitlines()) > 30:
+                    print(c(f"  ... ({len(content.splitlines())} lines total)", DIM))
+            else:
+                print(c(t("gitignore_empty_file"), YELLOW))
+            print()
+            pattern = input(f"{BOLD}{t('gitignore_add_prompt')}{RESET}").strip()
+            if not pattern or pattern.lower() == "b":
+                break
+            ok, msg = engine.append_to_gitignore(pattern)
+            print(c(msg, GREEN if ok else RED))
+        prompt_press_enter()
 
     # ─────────────────────────────────────────────────────────
     # 设置菜单
@@ -740,11 +830,14 @@ class FoolGitCLI:
 
         print("\n" + t("multi_opt_enter"))
         print(t("multi_opt_all"))
+        print(t("multi_opt_comma"))
         print(f"  {t('back_to_main')}")
         print()
 
         choice = input(f"{BOLD}Select option: {RESET}").strip()
-        if choice.lower() == "a":
+        if choice.lower() in ["b", ""]:
+            return
+        elif choice.lower() == "a":
             print(c(f"\n🚀 {t('multi_syncing', count=len(repos))}", BOLD + CYAN))
             succ, fail = 0, 0
             for r in repos:
@@ -767,3 +860,31 @@ class FoolGitCLI:
             else:
                 print(c(t("out_of_range", choice=choice), RED))
                 prompt_press_enter()
+        elif "," in choice:
+            # Comma-separated selection: sync specific repos
+            indices = []
+            for part in choice.split(","):
+                part = part.strip()
+                if part.isdigit():
+                    n = int(part)
+                    if 1 <= n <= len(repos):
+                        indices.append(n - 1)
+            if not indices:
+                print(c(t("invalid_choice"), RED))
+                prompt_press_enter()
+                return
+            selected = [repos[i] for i in indices]
+            print(c(f"\n🚀 {t('multi_syncing_selected', count=len(selected))}", BOLD + CYAN))
+            succ, fail = 0, 0
+            for r in selected:
+                print(f"\n▸ Repo: {BOLD}{r['name']}{RESET}")
+                eng = GitEngine(r["path"])
+                ok, logs = eng.one_click_sync()
+                for ln in logs:
+                    print(f"  {ln}")
+                if ok:
+                    succ += 1
+                else:
+                    fail += 1
+            print(c(f"\n{t('multi_sync_summary', succ=succ, fail=fail)}", GREEN if fail == 0 else YELLOW))
+            prompt_press_enter()

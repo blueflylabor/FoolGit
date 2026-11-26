@@ -17,7 +17,7 @@ from PyQt6.QtWidgets import (
     QScrollArea, QListWidget, QListWidgetItem, QGraphicsDropShadowEffect
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
-from PyQt6.QtGui import QFont, QColor
+from PyQt6.QtGui import QFont, QColor, QIcon, QPixmap, QPainter
 
 from .core import GitEngine, is_git_repo, run_git, scan_multi_repos
 from .config import ConfigManager
@@ -248,8 +248,9 @@ class FoolGitMainWindow(QMainWindow):
         self.engine = GitEngine(self.target_dir)
 
         self.setWindowTitle("FoolGit")
-        self.resize(560, 780)
-        self.setMinimumSize(500, 680)
+        self.setWindowIcon(self._create_app_icon())
+        self.resize(560, 820)
+        self.setMinimumSize(500, 700)
 
         # 检查是否为 Git 仓库
         if not is_git_repo(self.target_dir):
@@ -330,6 +331,30 @@ class FoolGitMainWindow(QMainWindow):
         root_layout.addWidget(header_card)
 
         # ─────────────────────────────────────────────────────
+        # 1.5 冲突急救横幅 (Conflict Rescue Banner - 默认隐藏)
+        # ─────────────────────────────────────────────────────
+        self.conflict_banner = QFrame()
+        self.conflict_banner.setStyleSheet(
+            "QFrame { background-color: #2A1517; border: 1px solid #7F1D1D; border-radius: 10px; }"
+        )
+        cb_layout = QHBoxLayout(self.conflict_banner)
+        cb_layout.setContentsMargins(14, 10, 14, 10)
+        cb_layout.setSpacing(10)
+
+        self.lbl_conflict_text = QLabel("⚠️  " + t("conflict_title"))
+        self.lbl_conflict_text.setStyleSheet("color: #FCA5A5; font-weight: 700; font-size: 12px; border: none;")
+        cb_layout.addWidget(self.lbl_conflict_text, stretch=1)
+
+        self.btn_conflict_rescue = QPushButton("🚑  " + t("gui_conflict_rescue"))
+        self.btn_conflict_rescue.setObjectName("UndoButton")
+        self.btn_conflict_rescue.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_conflict_rescue.clicked.connect(self._action_conflict_dialog)
+        cb_layout.addWidget(self.btn_conflict_rescue)
+
+        self.conflict_banner.hide()
+        root_layout.addWidget(self.conflict_banner)
+
+        # ─────────────────────────────────────────────────────
         # 2. 核心大动作: One-Click Sync & Save (Hero Card)
         # ─────────────────────────────────────────────────────
         sync_card = QFrame()
@@ -351,6 +376,31 @@ class FoolGitMainWindow(QMainWindow):
         self.txt_commit = QLineEdit()
         self.txt_commit.setPlaceholderText(t("gui_commit_placeholder"))
         sync_layout.addWidget(self.txt_commit)
+
+        # Conventional Commit 快捷标签 (Chips)
+        chips_row = QHBoxLayout()
+        chips_row.setSpacing(6)
+        self._commit_chips = []
+        chip_defs = [
+            ("feat", "gui_commit_chip_feat"),
+            ("fix", "gui_commit_chip_fix"),
+            ("docs", "gui_commit_chip_docs"),
+            ("chore", "gui_commit_chip_chore"),
+            ("refactor", "gui_commit_chip_refactor"),
+        ]
+        for prefix, i18n_key in chip_defs:
+            chip_btn = QPushButton(t(i18n_key))
+            chip_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            chip_btn.setStyleSheet(
+                "QPushButton { background-color: #202227; color: #9CA3AF; border: 1px solid #2E3038; "
+                "border-radius: 6px; padding: 3px 9px; font-size: 11px; font-weight: 600; }"
+                "QPushButton:hover { background-color: #2A2D34; color: #10B981; border-color: #10B981; }"
+            )
+            chip_btn.clicked.connect(lambda _checked=False, p=prefix: self._apply_commit_prefix(p))
+            chips_row.addWidget(chip_btn)
+            self._commit_chips.append((chip_btn, i18n_key))
+        chips_row.addStretch()
+        sync_layout.addLayout(chips_row)
 
         self.btn_sync = QPushButton("🚀  " + t("preset_sync_name"))
         self.btn_sync.setObjectName("SyncButton")
@@ -436,6 +486,7 @@ class FoolGitMainWindow(QMainWindow):
             "pull": ("⬇️", t("preset_pull_name"), self._action_pull, None),
             "status": ("🔍", t("preset_status_name"), self._action_status, None),
             "undo": ("💊", t("preset_undo_name"), self._action_undo_dialog, "UndoButton"),
+            "branch": ("🌿", t("preset_branch_name"), self._action_branch_dialog, None),
             "stash": ("📦", t("preset_stash_name"), self._action_stash_dialog, None),
             "history": ("📜", t("preset_history_name"), self._action_history_dialog, None),
             "diff": ("🔍", t("preset_diff_name"), self._action_diff_dialog, None),
@@ -443,6 +494,7 @@ class FoolGitMainWindow(QMainWindow):
             "tag": ("🏷️", t("preset_tag_name"), self._action_tag_dialog, None),
             "remote": ("🌐", t("preset_remote_name"), self._action_remote_dialog, None),
             "multi_sync": ("🔄", t("preset_multi_sync_name"), self._action_multi_sync_dialog, None),
+            "gitignore": ("🚫", t("preset_gitignore_name"), self._action_gitignore_dialog, None),
         }
 
         items = []
@@ -516,6 +568,14 @@ class FoolGitMainWindow(QMainWindow):
 
         self.lbl_status_pill.setText(status_text)
 
+        # 检测合并冲突并显示/隐藏急救横幅
+        conflicts = self.engine.get_conflict_files()
+        if conflicts:
+            self.lbl_conflict_text.setText(f"⚠️  {t('conflict_title')} ({len(conflicts)})")
+            self.conflict_banner.show()
+        else:
+            self.conflict_banner.hide()
+
     def _run_in_background(self, task_func, on_finished=None):
         """后台异步运行任务，保证主界面丝滑不假死"""
         self.worker = GitTaskThread(task_func)
@@ -534,6 +594,33 @@ class FoolGitMainWindow(QMainWindow):
     # 语言热切换 (100% 纯净无混杂)
     # ─────────────────────────────────────────────────────────
 
+    def _create_app_icon(self) -> QIcon:
+        """生成极简暗黑科技风应用图标"""
+        pixmap = QPixmap(64, 64)
+        pixmap.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pixmap)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing)
+        painter.setBrush(QColor("#10B981"))
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.drawRoundedRect(4, 4, 56, 56, 14, 14)
+        painter.setPen(QColor("#121316"))
+        painter.setFont(QFont("Helvetica", 30, QFont.Weight.Bold))
+        painter.drawText(pixmap.rect(), Qt.AlignmentFlag.AlignCenter, "⚡")
+        painter.end()
+        return QIcon(pixmap)
+
+    def _apply_commit_prefix(self, prefix: str):
+        """将 Conventional Commit 前缀填充到提交输入框"""
+        current = self.txt_commit.text().strip()
+        known_prefixes = ("feat:", "fix:", "docs:", "chore:", "refactor:")
+        for kp in known_prefixes:
+            if current.startswith(kp):
+                current = current[len(kp):].lstrip()
+                break
+        new_text = f"{prefix}: {current}" if current else f"{prefix}: "
+        self.txt_commit.setText(new_text)
+        self.txt_commit.setFocus()
+
     def apply_language(self, lang: str):
         """应用语言并刷新所有控件文字 (100% 纯净无混杂)"""
         self.config_mgr.set_language(lang)
@@ -541,6 +628,9 @@ class FoolGitMainWindow(QMainWindow):
         self.lbl_sync_title.setText(t("sync_banner"))
         self.lbl_sync_tip.setText(t("sync_tip"))
         self.txt_commit.setPlaceholderText(t("gui_commit_placeholder"))
+        for chip_btn, i18n_key in self._commit_chips:
+            chip_btn.setText(t(i18n_key))
+        self.btn_conflict_rescue.setText("🚑  " + t("gui_conflict_rescue"))
         self.btn_sync.setText("🚀  " + t("preset_sync_name"))
         self.lbl_act_section.setText(t("gui_quick_actions").upper())
         self.btn_refresh.setText("🔄 " + ("Refresh" if get_language() == "en" else "刷新状态"))
@@ -626,6 +716,10 @@ class FoolGitMainWindow(QMainWindow):
         btn_uncommit.setCursor(Qt.CursorShape.PointingHandCursor)
         d_layout.addWidget(btn_uncommit)
 
+        btn_amend = QPushButton("✏️  " + t("undo_opt_amend"))
+        btn_amend.setCursor(Qt.CursorShape.PointingHandCursor)
+        d_layout.addWidget(btn_amend)
+
         # 按文件丢弃
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
@@ -696,48 +790,313 @@ class FoolGitMainWindow(QMainWindow):
                 self.log(f"> {msg}")
                 self.refresh_status()
 
+        def do_amend():
+            new_msg, ok_input = QInputDialog.getText(
+                dialog, t("gui_amend_commit"), t("gui_amend_prompt")
+            )
+            if ok_input and new_msg.strip():
+                dialog.accept()
+                ok, msg = self.engine.amend_commit_message(new_msg.strip())
+                self.log(f"> {msg}")
+                self.refresh_status()
+
         btn_all.clicked.connect(do_all)
         btn_uncommit.clicked.connect(do_uncommit)
+        btn_amend.clicked.connect(do_amend)
         btn_discard_file.clicked.connect(do_discard_file)
         dialog.exec()
 
     def _action_stash_dialog(self):
-        """暂存箱弹窗"""
+        """暂存箱弹窗（含存盘、恢复与条目列表管理）"""
         dialog = QDialog(self)
         dialog.setWindowTitle(t("stash_title").replace(":", ""))
-        dialog.setFixedWidth(400)
+        dialog.setFixedSize(460, 440)
         dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
 
         d_layout = QVBoxLayout(dialog)
         d_layout.setContentsMargins(20, 18, 20, 18)
-        d_layout.setSpacing(12)
+        d_layout.setSpacing(10)
 
         title = QLabel(t("stash_title"))
         title.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
         d_layout.addWidget(title)
 
-        btn_save = QPushButton("📦  " + t("stash_opt_save"))
+        top_btns = QHBoxLayout()
+        btn_save = QPushButton("📦  " + t("stash_opt_save").split("(")[0].strip())
         btn_save.setCursor(Qt.CursorShape.PointingHandCursor)
-        d_layout.addWidget(btn_save)
+        top_btns.addWidget(btn_save)
 
-        btn_pop = QPushButton("📂  " + t("stash_opt_pop"))
+        btn_pop = QPushButton("📂  " + t("stash_opt_pop").split("(")[0].strip())
         btn_pop.setCursor(Qt.CursorShape.PointingHandCursor)
-        d_layout.addWidget(btn_pop)
+        top_btns.addWidget(btn_pop)
+        d_layout.addLayout(top_btns)
+
+        lbl_list = QLabel(t("gui_stash_list_label"))
+        lbl_list.setProperty("class", "Muted")
+        d_layout.addWidget(lbl_list)
+
+        stash_list = QListWidget()
+        d_layout.addWidget(stash_list, stretch=1)
+
+        entry_btns = QHBoxLayout()
+        btn_apply = QPushButton("📂  " + t("gui_stash_apply_btn"))
+        btn_apply.setCursor(Qt.CursorShape.PointingHandCursor)
+        entry_btns.addWidget(btn_apply)
+
+        btn_drop = QPushButton("🗑️  " + t("gui_stash_drop_btn"))
+        btn_drop.setObjectName("UndoButton")
+        btn_drop.setCursor(Qt.CursorShape.PointingHandCursor)
+        entry_btns.addWidget(btn_drop)
+        d_layout.addLayout(entry_btns)
+
+        def refresh_stashes():
+            stash_list.clear()
+            entries = self.engine.list_stashes()
+            if not entries:
+                item = QListWidgetItem(t("stash_list_empty"))
+                item.setFlags(Qt.ItemFlag.NoItemFlags)
+                stash_list.addItem(item)
+                btn_apply.setEnabled(False)
+                btn_drop.setEnabled(False)
+            else:
+                for idx, entry in enumerate(entries):
+                    item = QListWidgetItem(f"[{entry['ref']}]  {entry['desc']}")
+                    item.setData(Qt.ItemDataRole.UserRole, idx)
+                    stash_list.addItem(item)
+                stash_list.setCurrentRow(0)
+                btn_apply.setEnabled(True)
+                btn_drop.setEnabled(True)
 
         def do_save():
-            dialog.accept()
-            ok, msg = self.engine.stash_save()
+            note, ok_in = QInputDialog.getText(dialog, "Stash", t("stash_note_prompt"))
+            if not ok_in:
+                return
+            ok, msg = self.engine.stash_save(note.strip())
             self.log(f"> {msg}")
             self.refresh_status()
+            refresh_stashes()
 
         def do_pop():
-            dialog.accept()
             ok, msg = self.engine.stash_pop()
             self.log(f"> {msg}")
             self.refresh_status()
+            refresh_stashes()
+
+        def do_apply():
+            curr = stash_list.currentItem()
+            if not curr:
+                return
+            idx = curr.data(Qt.ItemDataRole.UserRole)
+            if idx is None:
+                return
+            ok, msg = self.engine.stash_apply(int(idx))
+            self.log(f"> {msg}")
+            self.refresh_status()
+
+        def do_drop():
+            curr = stash_list.currentItem()
+            if not curr:
+                return
+            idx = curr.data(Qt.ItemDataRole.UserRole)
+            if idx is None:
+                return
+            ok, msg = self.engine.stash_drop(int(idx))
+            self.log(f"> {msg}")
+            refresh_stashes()
 
         btn_save.clicked.connect(do_save)
         btn_pop.clicked.connect(do_pop)
+        btn_apply.clicked.connect(do_apply)
+        btn_drop.clicked.connect(do_drop)
+        refresh_stashes()
+        dialog.exec()
+
+    def _action_branch_dialog(self):
+        """分支管理弹窗（查看、切换、新建、删除分支）"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(t("gui_branch_manager"))
+        dialog.setFixedSize(440, 440)
+        dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
+
+        d_layout = QVBoxLayout(dialog)
+        d_layout.setContentsMargins(20, 18, 20, 18)
+        d_layout.setSpacing(10)
+
+        title = QLabel("🌿  " + t("gui_branch_manager"))
+        title.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
+        d_layout.addWidget(title)
+
+        lbl = QLabel(t("gui_branch_list_label"))
+        lbl.setProperty("class", "Muted")
+        d_layout.addWidget(lbl)
+
+        branch_list = QListWidget()
+        d_layout.addWidget(branch_list, stretch=1)
+
+        def refresh_branches():
+            branch_list.clear()
+            for b in self.engine.list_branches():
+                suffix = f"  {t('current_branch_mark')}" if b["is_current"] else ""
+                item = QListWidgetItem(f"{b['name']}{suffix}")
+                item.setData(Qt.ItemDataRole.UserRole, b["name"])
+                if b["is_current"]:
+                    item.setForeground(QColor("#10B981"))
+                branch_list.addItem(item)
+
+        btn_row = QHBoxLayout()
+        btn_switch = QPushButton("🔀  " + t("gui_branch_switch_btn"))
+        btn_switch.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_row.addWidget(btn_switch)
+
+        btn_delete = QPushButton("🗑️  " + t("gui_branch_delete_btn"))
+        btn_delete.setObjectName("UndoButton")
+        btn_delete.setCursor(Qt.CursorShape.PointingHandCursor)
+        btn_row.addWidget(btn_delete)
+        d_layout.addLayout(btn_row)
+
+        create_row = QHBoxLayout()
+        txt_new_branch = QLineEdit()
+        txt_new_branch.setPlaceholderText(t("gui_new_branch_placeholder"))
+        create_row.addWidget(txt_new_branch, stretch=1)
+
+        btn_create = QPushButton("➕  " + t("gui_branch_create_btn"))
+        btn_create.setCursor(Qt.CursorShape.PointingHandCursor)
+        create_row.addWidget(btn_create)
+        d_layout.addLayout(create_row)
+
+        def do_switch():
+            curr = branch_list.currentItem()
+            if not curr:
+                return
+            b_name = curr.data(Qt.ItemDataRole.UserRole)
+            ok, msg = self.engine.switch_branch(b_name)
+            self.log(f"> {msg}")
+            self.refresh_status()
+            refresh_branches()
+
+        def do_delete():
+            curr = branch_list.currentItem()
+            if not curr:
+                return
+            b_name = curr.data(Qt.ItemDataRole.UserRole)
+            reply = QMessageBox.question(
+                dialog, "Confirm", t("branch_delete_confirm", branch=b_name),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
+            )
+            ok, msg = self.engine.delete_branch(b_name, force=(reply == QMessageBox.StandardButton.Yes))
+            self.log(f"> {msg}")
+            self.refresh_status()
+            refresh_branches()
+
+        def do_create():
+            new_name = txt_new_branch.text().strip()
+            if not new_name:
+                return
+            ok, msg = self.engine.create_and_switch_branch(new_name)
+            self.log(f"> {msg}")
+            if ok:
+                txt_new_branch.clear()
+            self.refresh_status()
+            refresh_branches()
+
+        btn_switch.clicked.connect(do_switch)
+        btn_delete.clicked.connect(do_delete)
+        btn_create.clicked.connect(do_create)
+        refresh_branches()
+        dialog.exec()
+
+    def _action_gitignore_dialog(self):
+        """.gitignore 快速编辑弹窗"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(t("gui_gitignore_editor"))
+        dialog.setFixedSize(460, 440)
+        dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
+
+        d_layout = QVBoxLayout(dialog)
+        d_layout.setContentsMargins(20, 18, 20, 18)
+        d_layout.setSpacing(10)
+
+        title = QLabel("🚫  " + t("gui_gitignore_editor"))
+        title.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
+        d_layout.addWidget(title)
+
+        lbl = QLabel(t("gui_gitignore_content_label"))
+        lbl.setProperty("class", "Muted")
+        d_layout.addWidget(lbl)
+
+        txt_content = QTextEdit()
+        txt_content.setReadOnly(True)
+        txt_content.setObjectName("LogConsole")
+        d_layout.addWidget(txt_content, stretch=1)
+
+        def refresh_content():
+            content = self.engine.get_gitignore_content()
+            txt_content.setPlainText(content if content else t("gitignore_empty_file"))
+
+        add_row = QHBoxLayout()
+        txt_pattern = QLineEdit()
+        txt_pattern.setPlaceholderText(t("gui_gitignore_pattern_placeholder"))
+        add_row.addWidget(txt_pattern, stretch=1)
+
+        btn_add = QPushButton("➕  " + t("gui_gitignore_add_btn"))
+        btn_add.setCursor(Qt.CursorShape.PointingHandCursor)
+        add_row.addWidget(btn_add)
+        d_layout.addLayout(add_row)
+
+        def do_add():
+            pattern = txt_pattern.text().strip()
+            if not pattern:
+                return
+            ok, msg = self.engine.append_to_gitignore(pattern)
+            self.log(f"> {msg}")
+            if ok:
+                txt_pattern.clear()
+            refresh_content()
+            self.refresh_status()
+
+        btn_add.clicked.connect(do_add)
+        refresh_content()
+        dialog.exec()
+
+    def _action_conflict_dialog(self):
+        """合并冲突急救弹窗"""
+        dialog = QDialog(self)
+        dialog.setWindowTitle(t("gui_conflict_rescue"))
+        dialog.setFixedSize(440, 360)
+        dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
+
+        d_layout = QVBoxLayout(dialog)
+        d_layout.setContentsMargins(20, 18, 20, 18)
+        d_layout.setSpacing(10)
+
+        title = QLabel("🚑  " + t("gui_conflict_rescue"))
+        title.setFont(QFont("Helvetica", 14, QFont.Weight.Bold))
+        title.setStyleSheet("color: #EF4444;")
+        d_layout.addWidget(title)
+
+        lbl = QLabel(t("conflict_files_label"))
+        lbl.setProperty("class", "Muted")
+        d_layout.addWidget(lbl)
+
+        conflict_list = QListWidget()
+        for f in self.engine.get_conflict_files():
+            item = QListWidgetItem(f"⚠️  {f}")
+            item.setForeground(QColor("#FCA5A5"))
+            conflict_list.addItem(item)
+        d_layout.addWidget(conflict_list, stretch=1)
+
+        btn_abort = QPushButton("↩️  " + t("conflict_opt_abort").replace("[a] ", ""))
+        btn_abort.setObjectName("UndoButton")
+        btn_abort.setCursor(Qt.CursorShape.PointingHandCursor)
+        d_layout.addWidget(btn_abort)
+
+        def do_abort():
+            dialog.accept()
+            ok, msg = self.engine.abort_merge()
+            self.log(f"> {msg}")
+            self.refresh_status()
+
+        btn_abort.clicked.connect(do_abort)
         dialog.exec()
 
     def _action_clean_dialog(self):
@@ -1286,6 +1645,29 @@ class FoolGitMainWindow(QMainWindow):
 
         btn_add_cmd.clicked.connect(do_add_cmd)
         d_layout.addWidget(btn_add_cmd)
+
+        # 删除自定义命令按钮
+        btn_rm_cmd = QPushButton("🗑️ " + t("settings_opt_remove_custom"))
+        btn_rm_cmd.setCursor(Qt.CursorShape.PointingHandCursor)
+
+        def do_rm_cmd():
+            cmds = self.config_mgr.get_custom_commands()
+            if not cmds:
+                QMessageBox.information(dialog, t("settings_title"), t("remove_custom_empty"))
+                return
+            labels = [f"{c['name']} ({c['cmd']})" for c in cmds]
+            chosen_label, ok_sel = QInputDialog.getItem(
+                dialog, t("settings_opt_remove_custom"), t("remove_custom_title"), labels, 0, False
+            )
+            if ok_sel and chosen_label:
+                idx = labels.index(chosen_label)
+                target_cmd = cmds[idx]
+                self.config_mgr.remove_custom_command(target_cmd["id"])
+                self._render_quick_actions()
+                self.log(f"> {t('custom_removed', name=target_cmd['name'])}")
+
+        btn_rm_cmd.clicked.connect(do_rm_cmd)
+        d_layout.addWidget(btn_rm_cmd)
 
         # 重置按钮
         btn_reset = QPushButton(t("settings_opt_reset"))

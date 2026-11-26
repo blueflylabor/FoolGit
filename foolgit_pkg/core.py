@@ -308,6 +308,87 @@ class GitEngine:
             return False, f"⚠️ {t('stash_empty')}"
         return False, f"❌ {res.stderr or res.stdout}"
 
+    def list_stashes(self) -> List[Dict[str, str]]:
+        """列出所有暂存条目（索引 + 描述）"""
+        res = run_git(["stash", "list", "--pretty=format:%gd|%s"], cwd=self.repo_path)
+        stashes = []
+        if res.success and res.stdout:
+            for line in res.stdout.splitlines():
+                if "|" in line:
+                    ref, desc = line.split("|", 1)
+                    stashes.append({"ref": ref.strip(), "desc": desc.strip()})
+                else:
+                    stashes.append({"ref": line.strip(), "desc": line.strip()})
+        return stashes
+
+    def stash_apply(self, index: int = 0) -> Tuple[bool, str]:
+        """应用指定索引的暂存条目（不删除）"""
+        ref = f"stash@{{{index}}}"
+        res = run_git(["stash", "apply", ref], cwd=self.repo_path)
+        if res.success:
+            return True, f"📂 {t('stash_applied', ref=ref)}"
+        return False, f"❌ {res.stderr or res.stdout}"
+
+    def stash_drop(self, index: int = 0) -> Tuple[bool, str]:
+        """删除指定索引的暂存条目"""
+        ref = f"stash@{{{index}}}"
+        res = run_git(["stash", "drop", ref], cwd=self.repo_path)
+        if res.success:
+            return True, f"🗑️ {t('stash_dropped', ref=ref)}"
+        return False, f"❌ {res.stderr or res.stdout}"
+
+    def amend_commit_message(self, new_msg: str) -> Tuple[bool, str]:
+        """修改上一次提交的说明（amend）"""
+        new_msg = new_msg.strip()
+        if not new_msg:
+            return False, t("amend_empty_msg")
+        res = run_git(["commit", "--amend", "-m", new_msg], cwd=self.repo_path)
+        if res.success:
+            return True, f"✅ {t('amend_success', msg=new_msg)}"
+        return False, f"❌ {res.stderr or res.stdout}"
+
+    def get_conflict_files(self) -> List[str]:
+        """获取当前 merge 冲突文件列表"""
+        res = run_git(["diff", "--name-only", "--diff-filter=U"], cwd=self.repo_path)
+        if res.success and res.stdout:
+            return [f.strip() for f in res.stdout.splitlines() if f.strip()]
+        return []
+
+    def abort_merge(self) -> Tuple[bool, str]:
+        """中止当前 merge，恢复到 merge 前状态"""
+        res = run_git(["merge", "--abort"], cwd=self.repo_path)
+        if res.success:
+            return True, f"✅ {t('merge_abort_success')}"
+        return False, f"❌ {res.stderr or res.stdout}"
+
+    def get_gitignore_content(self) -> str:
+        """读取仓库根目录的 .gitignore 文件内容"""
+        path = Path(self.repo_path) / ".gitignore"
+        if path.exists():
+            try:
+                return path.read_text(encoding="utf-8", errors="replace")
+            except Exception as e:
+                return str(e)
+        return ""
+
+    def append_to_gitignore(self, pattern: str) -> Tuple[bool, str]:
+        """追加一行 pattern 到 .gitignore（若不存在则创建）"""
+        pattern = pattern.strip()
+        if not pattern:
+            return False, t("gitignore_empty_pattern")
+        path = Path(self.repo_path) / ".gitignore"
+        try:
+            existing = path.read_text(encoding="utf-8") if path.exists() else ""
+            if pattern in existing.splitlines():
+                return True, f"ℹ️ {t('gitignore_already_exists', pattern=pattern)}"
+            with open(path, "a", encoding="utf-8") as f:
+                if existing and not existing.endswith("\n"):
+                    f.write("\n")
+                f.write(pattern + "\n")
+            return True, f"✅ {t('gitignore_added', pattern=pattern)}"
+        except Exception as e:
+            return False, f"❌ {str(e)}"
+
     def get_recent_history(self, count: int = 10) -> List[str]:
         """获取最近简明提交流水线"""
         cmd = ["log", f"-n{count}", "--pretty=format:%h|%an|%ar|%s"]

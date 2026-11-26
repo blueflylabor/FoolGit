@@ -12,7 +12,7 @@ DEFAULT_ACTIVE_IDS = ["sync", "pull", "status", "undo", "branch", "stash"]
 # 所有官方预设功能的 ID 顺序列表
 ALL_PRESET_IDS = [
     "sync", "pull", "status", "undo", "branch", "stash",
-    "history", "diff", "clean", "tag", "remote", "multi_sync"
+    "history", "diff", "clean", "tag", "remote", "multi_sync", "gitignore"
 ]
 
 
