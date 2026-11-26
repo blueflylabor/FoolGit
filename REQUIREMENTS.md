@@ -54,7 +54,8 @@
 - [x] **Quick Repo Switcher in GUI**: Switch working repository folder directly from the header without restarting.
 - [x] **Short Commit Hash Display**: Show current commit OID (`main @ 473e552`) in status & header.
 
-### Phase 4 — Future Roadmap (Planned)
-- [ ] **Visual Timeline Graph**: Minimalist 1-column commit dot graph in History Viewer (without SmartGit's noisy 10-column table).
-- [ ] **GitHub / GitLab One-Click PR Link**: Detect remote URL and offer "Open Compare / Create PR in Browser".
+### Phase 4 — Future Roadmap (In Progress / Planned)
+- [x] **Visual Timeline Graph**: Minimalist 1-column commit dot (`●`) + branch/tag decoration in History Viewer (without SmartGit's noisy 10-column table).
+- [x] **GitHub / GitLab One-Click Web Link**: Convert `origin` SSH/HTTPS URL and open repository in browser with 1 click (`🌐 Open Web`).
+- [x] **Keyboard & Async Ergonomics**: Press `Enter` in commit field to sync, busy-state button lock, and one-click "Add Sensitive Files to .gitignore & Sync".
 - [ ] **macOS `.app` & Homebrew Tap**: Zero-config distribution for non-technical users.

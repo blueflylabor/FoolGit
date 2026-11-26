@@ -7,6 +7,7 @@ FoolGit 极简图形化交互界面 (GUI) - PyQt6 版本
 
 import os
 import sys
+import webbrowser
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 
@@ -315,6 +316,14 @@ class FoolGitMainWindow(QMainWindow):
         self.btn_switch_repo.clicked.connect(self._action_switch_repo)
         repo_row.addWidget(self.btn_switch_repo)
 
+        self.btn_open_web = QPushButton(t("gui_open_remote_web"))
+        self.btn_open_web.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_open_web.setStyleSheet(
+            "QPushButton { padding: 3px 8px; font-size: 11px; color: #60A5FA; border-color: #2563EB; }"
+        )
+        self.btn_open_web.clicked.connect(self._action_open_web)
+        repo_row.addWidget(self.btn_open_web)
+
         repo_row.addStretch()
 
         self.branch_combo = QComboBox()
@@ -383,6 +392,7 @@ class FoolGitMainWindow(QMainWindow):
 
         self.txt_commit = QLineEdit()
         self.txt_commit.setPlaceholderText(t("gui_commit_placeholder"))
+        self.txt_commit.returnPressed.connect(self._action_sync)
         sync_layout.addWidget(self.txt_commit)
 
         # Conventional Commit 快捷标签 (Chips)
@@ -597,12 +607,18 @@ class FoolGitMainWindow(QMainWindow):
             self.conflict_banner.hide()
 
     def _run_in_background(self, task_func, on_finished=None):
-        """后台异步运行任务，保证主界面丝滑不假死"""
+        """后台异步运行任务，保证主界面丝滑不假死并防止重复点击"""
+        self.btn_sync.setEnabled(False)
+        self.btn_sync.setText(t("gui_syncing_btn"))
+        self.btn_refresh.setEnabled(False)
         self.worker = GitTaskThread(task_func)
 
         def handle_done(ok, logs):
             for l in logs:
                 self.log(l)
+            self.btn_sync.setEnabled(True)
+            self.btn_sync.setText("🚀  " + t("preset_sync_name"))
+            self.btn_refresh.setEnabled(True)
             if on_finished:
                 on_finished(ok)
             self.refresh_status()
@@ -661,11 +677,21 @@ class FoolGitMainWindow(QMainWindow):
         self.refresh_status()
         self.log(f"> 📁 {self.engine.repo_path}")
 
+    def _action_open_web(self):
+        """在默认浏览器中打开远程仓库网页"""
+        web_url = self.engine.get_remote_web_url()
+        if not web_url:
+            QMessageBox.information(self, "FoolGit", t("gui_no_web_remote"))
+            return
+        webbrowser.open(web_url)
+        self.log(f"> 🌐 {web_url}")
+
     def apply_language(self, lang: str):
         """应用语言并刷新所有控件文字 (100% 纯净无混杂)"""
         self.config_mgr.set_language(lang)
         self.btn_lang.setText(t("lang_toggle_btn"))
         self.btn_switch_repo.setText(t("gui_switch_repo_btn"))
+        self.btn_open_web.setText(t("gui_open_remote_web"))
         self.lbl_sync_title.setText(t("sync_banner"))
         self.lbl_sync_tip.setText(t("sync_tip"))
         self.txt_commit.setPlaceholderText(t("gui_commit_placeholder"))
@@ -702,13 +728,25 @@ class FoolGitMainWindow(QMainWindow):
             if risks["large_files"]:
                 lf_str = ", ".join(f"{name} ({mb}MB)" for name, mb in risks["large_files"])
                 lines.append("• " + t("risk_large_files") + " " + lf_str)
-            reply = QMessageBox.warning(
-                self,
-                t("gui_risk_confirm_title"),
-                "\n".join(lines),
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
-            if reply != QMessageBox.StandardButton.Yes:
+            msg_box = QMessageBox(self)
+            msg_box.setIcon(QMessageBox.Icon.Warning)
+            msg_box.setWindowTitle(t("gui_risk_confirm_title"))
+            msg_box.setText("\n".join(lines))
+            btn_ignore_sync = None
+            if risks["sensitive_files"] and not risks["detached_head"]:
+                btn_ignore_sync = msg_box.addButton(t("gui_risk_ignore_btn"), QMessageBox.ButtonRole.AcceptRole)
+            btn_yes = msg_box.addButton(QMessageBox.StandardButton.Yes)
+            btn_no = msg_box.addButton(QMessageBox.StandardButton.No)
+            msg_box.setDefaultButton(btn_no)
+            msg_box.exec()
+
+            clicked = msg_box.clickedButton()
+            if clicked == btn_ignore_sync and btn_ignore_sync is not None:
+                for sf in risks["sensitive_files"]:
+                    _, ign_msg = self.engine.append_to_gitignore(sf)
+                    self.log(f"> {ign_msg}")
+                self.refresh_status()
+            elif clicked != btn_yes:
                 self.log(f"> {t('cancelled')}")
                 return
 
@@ -1546,7 +1584,8 @@ class FoolGitMainWindow(QMainWindow):
             parts = item.split("|")
             if len(parts) >= 4:
                 h, author, when, msg = parts[0], parts[1], parts[2], parts[3]
-                display_text = f"{h}  ─  {msg}  ({when} by {author})"
+                deco = f" {parts[4].strip()}" if len(parts) >= 5 and parts[4].strip() else ""
+                display_text = f"● {h}{deco}  ─  {msg}  ({when} · {author})"
                 commit_map[display_text] = h
                 list_commits.addItem(display_text)
             else:
@@ -1791,15 +1830,15 @@ class FoolGitMainWindow(QMainWindow):
         reply = QMessageBox.question(
             self,
             "FoolGit",
-            "Current directory is not a Git repository. Initialize one here?",
+            t("non_git_gui_prompt"),
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if reply == QMessageBox.StandardButton.Yes:
             res = run_git(["init"], cwd=self.target_dir)
             if res.success:
-                QMessageBox.information(self, "Success", "Git repository initialized successfully!")
+                QMessageBox.information(self, "FoolGit", t("non_git_init_ok"))
             else:
-                QMessageBox.critical(self, "Error", f"Failed to initialize: {res.stderr}")
+                QMessageBox.critical(self, "FoolGit", t("non_git_init_fail", error=res.stderr))
 
 
 def launch_gui(target_dir: str = "."):

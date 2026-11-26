@@ -75,6 +75,21 @@ class GitEngine:
             self._cached_remote_url = remote_res.stdout if remote_res.success else ""
         return self._cached_remote_url
 
+    def get_remote_web_url(self) -> str:
+        """将 SSH/HTTPS 的 origin 地址转换为可直接在浏览器打开的网页链接"""
+        raw = self.get_remote_url().strip()
+        if not raw:
+            return ""
+        url = raw
+        if url.startswith("git@") and ":" in url:
+            host_part, path_part = url[4:].split(":", 1)
+            url = f"https://{host_part}/{path_part}"
+        elif url.startswith("ssh://git@"):
+            url = "https://" + url[len("ssh://git@"):]
+        if url.endswith(".git"):
+            url = url[:-4]
+        return url if url.startswith("http://") or url.startswith("https://") else ""
+
     def get_info(self) -> Dict[str, Any]:
         """获取仓库当前详细健康状况与状态指标 (使用 porcelain=v2 单次高效解析)"""
         status_res = run_git(["status", "--porcelain=v2", "--branch"], cwd=self.repo_path)
@@ -451,8 +466,8 @@ class GitEngine:
             return False, f"❌ {str(e)}"
 
     def get_recent_history(self, count: int = 10) -> List[str]:
-        """获取最近简明提交流水线"""
-        cmd = ["log", f"-n{count}", "--pretty=format:%h|%an|%ar|%s"]
+        """获取最近简明提交流水线（含分支/标签装饰）"""
+        cmd = ["log", f"-n{count}", "--pretty=format:%h|%an|%ar|%s|%d"]
         res = run_git(cmd, cwd=self.repo_path)
         if res.success and res.stdout:
             return res.stdout.splitlines()

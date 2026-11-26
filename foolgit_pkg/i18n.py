@@ -315,6 +315,13 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "gui_conflict_keep_mine": "Keep My Version",
         "gui_conflict_use_remote": "Use Remote Version",
         "gui_risk_confirm_title": "Pre-Sync Safety Warning",
+        "gui_risk_ignore_btn": "Add Sensitive Files to .gitignore && Sync",
+        "gui_open_remote_web": "🌐 Open Web",
+        "gui_no_web_remote": "No GitHub/GitLab/Gitee web URL found for origin.",
+        "gui_syncing_btn": "⏳  Syncing...",
+        "non_git_gui_prompt": "Current directory is not a Git repository. Initialize one here?",
+        "non_git_init_ok": "Git repository initialized successfully!",
+        "non_git_init_fail": "Failed to initialize: {error}",
 
         # Gitignore editor
         "gitignore_title": ".gitignore Quick Editor:",
@@ -686,6 +693,13 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "gui_conflict_keep_mine": "保留我的版本",
         "gui_conflict_use_remote": "使用远程版本",
         "gui_risk_confirm_title": "同步前安全提醒",
+        "gui_risk_ignore_btn": "将敏感文件加入 .gitignore 并同步",
+        "gui_open_remote_web": "🌐 打开网页",
+        "gui_no_web_remote": "未检测到可用的 GitHub/GitLab/Gitee 网页地址。",
+        "gui_syncing_btn": "⏳  正在同步...",
+        "non_git_gui_prompt": "当前目录不是 Git 仓库，是否立即在此初始化？",
+        "non_git_init_ok": "Git 仓库初始化成功！",
+        "non_git_init_fail": "初始化失败: {error}",
 
         # Gitignore editor
         "gitignore_title": ".gitignore 快速编辑:",
