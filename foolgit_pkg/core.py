@@ -80,6 +80,7 @@ class GitEngine:
         status_res = run_git(["status", "--porcelain=v2", "--branch"], cwd=self.repo_path)
 
         branch = "HEAD"
+        commit_oid = ""
         ahead = 0
         behind = 0
         has_upstream = False
@@ -89,7 +90,11 @@ class GitEngine:
 
         if status_res.success and status_res.stdout:
             for line in status_res.stdout.splitlines():
-                if line.startswith("# branch.head "):
+                if line.startswith("# branch.oid "):
+                    oid = line[13:].strip()
+                    if oid and oid != "(initial)":
+                        commit_oid = oid[:7]
+                elif line.startswith("# branch.head "):
                     branch = line[14:].strip()
                 elif line.startswith("# branch.upstream "):
                     has_upstream = True
@@ -120,6 +125,7 @@ class GitEngine:
             "name": repo_name,
             "path": self.repo_path,
             "branch": branch,
+            "commit_oid": commit_oid,
             "has_upstream": has_upstream,
             "ahead": ahead,
             "behind": behind,
@@ -188,8 +194,7 @@ class GitEngine:
                 return False, logs
 
             # 4. Commit
-            now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-            commit_text = custom_msg.strip() if custom_msg and custom_msg.strip() else f"update: {now_str}"
+            commit_text = custom_msg.strip() if custom_msg and custom_msg.strip() else self.generate_smart_commit_msg()
             logs.append(f"▸ {t('sync_step_commit', msg=commit_text)}")
             commit_res = run_git(["commit", "-m", commit_text], cwd=self.repo_path)
             if not commit_res.success:
@@ -360,6 +365,62 @@ class GitEngine:
         if res.success:
             return True, f"✅ {t('merge_abort_success')}"
         return False, f"❌ {res.stderr or res.stdout}"
+
+    def resolve_conflict(self, file_path: str, strategy: str = "ours") -> Tuple[bool, str]:
+        """用通俗策略解决单文件冲突: 'ours' (保留本地) 或 'theirs' (使用远端)"""
+        if strategy not in ("ours", "theirs"):
+            return False, "Invalid conflict resolution strategy."
+        flag = "--ours" if strategy == "ours" else "--theirs"
+        res = run_git(["checkout", flag, "--", file_path], cwd=self.repo_path)
+        if not res.success:
+            return False, f"❌ {res.stderr or res.stdout}"
+        add_res = run_git(["add", "--", file_path], cwd=self.repo_path)
+        if add_res.success:
+            key = "conflict_resolved_ours" if strategy == "ours" else "conflict_resolved_theirs"
+            return True, f"✅ {t(key, file=file_path)}"
+        return False, f"❌ {add_res.stderr or add_res.stdout}"
+
+    def generate_smart_commit_msg(self) -> str:
+        """根据当前改动文件自动生成简洁可读的提交说明"""
+        info = self.get_info()
+        changed = list(dict.fromkeys(info["staged"] + info["modified"] + info["untracked"]))
+        if not changed:
+            return f"update: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
+        names = [Path(p).name for p in changed[:2]]
+        suffix = f", +{len(changed) - 2}" if len(changed) > 2 else ""
+        return f"update: {len(changed)} file(s) ({', '.join(names)}{suffix})"
+
+    def check_sync_risks(self, large_mb: int = 10) -> Dict[str, Any]:
+        """同步前安全巡检：检测游离 HEAD、超大文件与敏感文件"""
+        info = self.get_info()
+        detached_head = info["branch"] in ("HEAD", "(detached)")
+        changed = list(dict.fromkeys(info["modified"] + info["untracked"] + info["staged"]))
+        large_files: List[Tuple[str, float]] = []
+        sensitive_files: List[str] = []
+        sensitive_names = {".env", ".ds_store", "id_rsa", "id_ed25519"}
+        sensitive_exts = {".pem", ".key", ".p12", ".pfx"}
+        threshold = large_mb * 1024 * 1024
+
+        for rel in changed:
+            full = Path(self.repo_path) / rel
+            if not full.exists() or not full.is_file():
+                continue
+            fname_lower = full.name.lower()
+            if fname_lower in sensitive_names or fname_lower.startswith(".env.") or full.suffix.lower() in sensitive_exts:
+                sensitive_files.append(rel)
+            try:
+                size = full.stat().st_size
+                if size >= threshold:
+                    large_files.append((rel, round(size / (1024 * 1024), 1)))
+            except OSError:
+                pass
+
+        return {
+            "detached_head": detached_head,
+            "large_files": large_files,
+            "sensitive_files": sensitive_files,
+            "has_risk": detached_head or bool(large_files) or bool(sensitive_files),
+        }
 
     def get_gitignore_content(self) -> str:
         """读取仓库根目录的 .gitignore 文件内容"""

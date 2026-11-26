@@ -14,7 +14,7 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QLineEdit, QComboBox,
     QTextEdit, QFrame, QDialog, QCheckBox, QMessageBox, QInputDialog,
-    QScrollArea, QListWidget, QListWidgetItem, QGraphicsDropShadowEffect
+    QScrollArea, QListWidget, QListWidgetItem, QGraphicsDropShadowEffect, QFileDialog
 )
 from PyQt6.QtCore import Qt, QThread, pyqtSignal
 from PyQt6.QtGui import QFont, QColor, QIcon, QPixmap, QPainter
@@ -307,6 +307,14 @@ class FoolGitMainWindow(QMainWindow):
         self.lbl_repo_name.setFont(QFont("Helvetica", 12, QFont.Weight.Bold))
         repo_row.addWidget(self.lbl_repo_name)
 
+        self.btn_switch_repo = QPushButton(t("gui_switch_repo_btn"))
+        self.btn_switch_repo.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_switch_repo.setStyleSheet(
+            "QPushButton { padding: 3px 8px; font-size: 11px; color: #9CA3AF; border-color: #2E3038; }"
+        )
+        self.btn_switch_repo.clicked.connect(self._action_switch_repo)
+        repo_row.addWidget(self.btn_switch_repo)
+
         repo_row.addStretch()
 
         self.branch_combo = QComboBox()
@@ -400,6 +408,17 @@ class FoolGitMainWindow(QMainWindow):
             chips_row.addWidget(chip_btn)
             self._commit_chips.append((chip_btn, i18n_key))
         chips_row.addStretch()
+
+        self.btn_auto_msg = QPushButton(t("gui_auto_msg_chip"))
+        self.btn_auto_msg.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.btn_auto_msg.setStyleSheet(
+            "QPushButton { background-color: #172B23; color: #34D399; border: 1px solid #1E4636; "
+            "border-radius: 6px; padding: 3px 10px; font-size: 11px; font-weight: 700; }"
+            "QPushButton:hover { background-color: #1E3A2F; color: #6EE7B7; }"
+        )
+        self.btn_auto_msg.clicked.connect(self._fill_smart_commit_msg)
+        chips_row.addWidget(self.btn_auto_msg)
+
         sync_layout.addLayout(chips_row)
 
         self.btn_sync = QPushButton("🚀  " + t("preset_sync_name"))
@@ -533,7 +552,8 @@ class FoolGitMainWindow(QMainWindow):
     def refresh_status(self):
         """刷新仓库健康状态和分支"""
         info = self.engine.get_info()
-        self.lbl_repo_name.setText(f"📁 {info['name']}")
+        oid_suffix = f"  ·  {info['commit_oid']}" if info.get("commit_oid") else ""
+        self.lbl_repo_name.setText(f"📁 {info['name']}{oid_suffix}")
 
         # 刷新分支列表 (静音 signal 避免触发切分支)
         self.branch_combo.blockSignals(True)
@@ -621,15 +641,37 @@ class FoolGitMainWindow(QMainWindow):
         self.txt_commit.setText(new_text)
         self.txt_commit.setFocus()
 
+    def _fill_smart_commit_msg(self):
+        """一键生成并填充可读的改动摘要作为提交说明"""
+        msg = self.engine.generate_smart_commit_msg()
+        self.txt_commit.setText(msg)
+        self.txt_commit.setFocus()
+
+    def _action_switch_repo(self):
+        """在界面内直接切换工作的 Git 仓库目录"""
+        chosen_dir = QFileDialog.getExistingDirectory(
+            self, t("gui_switch_repo_btn"), str(Path(self.target_dir).resolve())
+        )
+        if not chosen_dir:
+            return
+        self.target_dir = chosen_dir
+        if not is_git_repo(self.target_dir):
+            self._handle_non_git_repo()
+        self.engine = GitEngine(self.target_dir)
+        self.refresh_status()
+        self.log(f"> 📁 {self.engine.repo_path}")
+
     def apply_language(self, lang: str):
         """应用语言并刷新所有控件文字 (100% 纯净无混杂)"""
         self.config_mgr.set_language(lang)
         self.btn_lang.setText(t("lang_toggle_btn"))
+        self.btn_switch_repo.setText(t("gui_switch_repo_btn"))
         self.lbl_sync_title.setText(t("sync_banner"))
         self.lbl_sync_tip.setText(t("sync_tip"))
         self.txt_commit.setPlaceholderText(t("gui_commit_placeholder"))
         for chip_btn, i18n_key in self._commit_chips:
             chip_btn.setText(t(i18n_key))
+        self.btn_auto_msg.setText(t("gui_auto_msg_chip"))
         self.btn_conflict_rescue.setText("🚑  " + t("gui_conflict_rescue"))
         self.btn_sync.setText("🚀  " + t("preset_sync_name"))
         self.lbl_act_section.setText(t("gui_quick_actions").upper())
@@ -649,7 +691,27 @@ class FoolGitMainWindow(QMainWindow):
     # ─────────────────────────────────────────────────────────
 
     def _action_sync(self):
-        """触发一键保存并同步"""
+        """触发一键保存并同步（含同步前安全体检）"""
+        risks = self.engine.check_sync_risks()
+        if risks["has_risk"]:
+            lines = [t("risk_warning_title"), ""]
+            if risks["detached_head"]:
+                lines.append("• " + t("risk_detached_head"))
+            if risks["sensitive_files"]:
+                lines.append("• " + t("risk_sensitive_files") + " " + ", ".join(risks["sensitive_files"]))
+            if risks["large_files"]:
+                lf_str = ", ".join(f"{name} ({mb}MB)" for name, mb in risks["large_files"])
+                lines.append("• " + t("risk_large_files") + " " + lf_str)
+            reply = QMessageBox.warning(
+                self,
+                t("gui_risk_confirm_title"),
+                "\n".join(lines),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply != QMessageBox.StandardButton.Yes:
+                self.log(f"> {t('cancelled')}")
+                return
+
         user_msg = self.txt_commit.text().strip()
 
         self.log(f"\n> ─── {t('sync_banner')} ───")
@@ -1059,10 +1121,10 @@ class FoolGitMainWindow(QMainWindow):
         dialog.exec()
 
     def _action_conflict_dialog(self):
-        """合并冲突急救弹窗"""
+        """合并冲突急救弹窗（保留本地 / 使用远程 / 中止合并）"""
         dialog = QDialog(self)
         dialog.setWindowTitle(t("gui_conflict_rescue"))
-        dialog.setFixedSize(440, 360)
+        dialog.setFixedSize(480, 420)
         dialog.setStyleSheet("background-color: #1C1D21; color: #F3F4F6;")
 
         d_layout = QVBoxLayout(dialog)
@@ -1079,16 +1141,49 @@ class FoolGitMainWindow(QMainWindow):
         d_layout.addWidget(lbl)
 
         conflict_list = QListWidget()
-        for f in self.engine.get_conflict_files():
-            item = QListWidgetItem(f"⚠️  {f}")
-            item.setForeground(QColor("#FCA5A5"))
-            conflict_list.addItem(item)
         d_layout.addWidget(conflict_list, stretch=1)
+
+        resolve_row = QHBoxLayout()
+        btn_ours = QPushButton("🛡️  " + t("gui_conflict_keep_mine"))
+        btn_ours.setCursor(Qt.CursorShape.PointingHandCursor)
+        resolve_row.addWidget(btn_ours)
+
+        btn_theirs = QPushButton("☁️  " + t("gui_conflict_use_remote"))
+        btn_theirs.setCursor(Qt.CursorShape.PointingHandCursor)
+        resolve_row.addWidget(btn_theirs)
+        d_layout.addLayout(resolve_row)
 
         btn_abort = QPushButton("↩️  " + t("conflict_opt_abort").replace("[a] ", ""))
         btn_abort.setObjectName("UndoButton")
         btn_abort.setCursor(Qt.CursorShape.PointingHandCursor)
         d_layout.addWidget(btn_abort)
+
+        def refresh_conflicts():
+            conflict_list.clear()
+            files = self.engine.get_conflict_files()
+            for f in files:
+                item = QListWidgetItem(f"⚠️  {f}")
+                item.setData(Qt.ItemDataRole.UserRole, f)
+                item.setForeground(QColor("#FCA5A5"))
+                conflict_list.addItem(item)
+            if files:
+                conflict_list.setCurrentRow(0)
+            btn_ours.setEnabled(bool(files))
+            btn_theirs.setEnabled(bool(files))
+            if not files:
+                dialog.accept()
+
+        def do_resolve(strategy: str):
+            curr = conflict_list.currentItem()
+            if not curr:
+                return
+            fpath = curr.data(Qt.ItemDataRole.UserRole)
+            if not fpath:
+                return
+            ok, msg = self.engine.resolve_conflict(fpath, strategy)
+            self.log(f"> {msg}")
+            self.refresh_status()
+            refresh_conflicts()
 
         def do_abort():
             dialog.accept()
@@ -1096,7 +1191,10 @@ class FoolGitMainWindow(QMainWindow):
             self.log(f"> {msg}")
             self.refresh_status()
 
+        btn_ours.clicked.connect(lambda: do_resolve("ours"))
+        btn_theirs.clicked.connect(lambda: do_resolve("theirs"))
         btn_abort.clicked.connect(do_abort)
+        refresh_conflicts()
         dialog.exec()
 
     def _action_clean_dialog(self):

@@ -223,6 +223,23 @@ class FoolGitCLI:
         print(c("══════════════════════════════════════════", CYAN))
         print(f"💡 {t('sync_tip')}")
 
+        risks = engine.check_sync_risks()
+        if risks["has_risk"]:
+            print()
+            print(c(f"⚠️  {t('risk_warning_title')}", BOLD + YELLOW))
+            if risks["detached_head"]:
+                print(f"  • {c(t('risk_detached_head'), RED)}")
+            if risks["sensitive_files"]:
+                print(f"  • {c(t('risk_sensitive_files'), YELLOW)} {', '.join(risks['sensitive_files'])}")
+            if risks["large_files"]:
+                lf_str = ", ".join(f"{name} ({mb}MB)" for name, mb in risks["large_files"])
+                print(f"  • {c(t('risk_large_files'), YELLOW)} {lf_str}")
+            ans = input(f"\n{BOLD}{t('risk_continue_prompt')}{RESET}").strip().lower()
+            if ans != "y":
+                print(c(t("cancelled"), YELLOW))
+                prompt_press_enter()
+                return
+
         custom_msg = input(f"{BOLD}{t('commit_prompt')}{RESET}").strip()
 
         print(f"\n{t('syncing')}")
@@ -250,20 +267,36 @@ class FoolGitCLI:
             print(c(msg, GREEN))
         else:
             print(c(msg, RED if "❌" in msg else YELLOW))
-            conflicts = engine.get_conflict_files()
-            if conflicts:
+            while True:
+                conflicts = engine.get_conflict_files()
+                if not conflicts:
+                    break
                 print()
                 print(c(f"🚑 {t('conflict_title')}", BOLD + RED))
                 print(t("conflict_files_label"))
-                for cf in conflicts:
-                    print(f"  {c('!', RED)} {cf}")
+                for idx, cf in enumerate(conflicts, start=1):
+                    print(f"  [{idx}] {c('!', RED)} {cf}")
                 print()
+                print(f" {t('conflict_opt_ours')}")
+                print(f" {t('conflict_opt_theirs')}")
                 print(f" {t('conflict_opt_abort')}")
                 print(f" {t('conflict_opt_back')}")
                 ans = input(f"{BOLD}{t('conflict_prompt')}{RESET}").strip().lower()
-                if ans == "a":
+                if ans in ("b", ""):
+                    break
+                elif ans == "a":
                     ab_ok, ab_msg = engine.abort_merge()
                     print(c(ab_msg, GREEN if ab_ok else RED))
+                    break
+                elif ans in ("m", "r"):
+                    sel = input(f"{BOLD}{t('conflict_select_file_prompt')}{RESET}").strip()
+                    if sel.isdigit() and 1 <= int(sel) <= len(conflicts):
+                        target_cf = conflicts[int(sel) - 1]
+                        strat = "ours" if ans == "m" else "theirs"
+                        r_ok, r_msg = engine.resolve_conflict(target_cf, strat)
+                        print(c(r_msg, GREEN if r_ok else RED))
+                    else:
+                        print(c(t("invalid_choice"), RED))
         prompt_press_enter()
 
     def _action_status(self, engine: GitEngine):
