@@ -100,3 +100,9 @@ foolgit_pkg/
 1. [x] **Modularize `gui.py`** into `foolgit_pkg/gui/` (`theme.py`, `dialogs.py`, `window.py`, `__init__.py`), sharing `create_dark_dialog` & `render_diff_html` helpers and dark scrollbars.
 2. [x] **Visual & Metaphor Parity**: Aligned GUI dialogs with CLI metaphors (*Undo Pills*, *Temporary Locker* with live diff peek, *Parallel Worlds*, *Time Machine* with Compare/Branch/Revert) and added one-click `🔀 Create PR` (`get_pr_compare_url()`).
 3. [ ] **Distribution**: macOS `.app` (`--onedir`) & Homebrew formula tap for zero-config installation.
+
+---
+
+## 7. Detailed Competitive Benchmark & Sprint C Blueprint
+
+👉 See **[docs/NEXT_ITERATION_GUIDE.md](docs/NEXT_ITERATION_GUIDE.md)** for the full 6-product market benchmark (*GitHub Desktop*, *SmartGit*, *SourceTree*, *Fork*, *Lazygit*, *VS Code + GitLens*), gap audit of the current `5,300` LOC codebase, and step-by-step **Sprint C** implementation specs (`scan_multi_repos` pruning, selective exclusion on sync, auth failure diagnostics, Reflog emergency rescue, and unified dark confirm dialogs + `PyInstaller` packaging check).
