@@ -278,11 +278,14 @@ class GitEngine:
             return False, f"❌ {t('pull_conflict')}"
         if "couldn't find remote ref" in err_msg.lower():
             return False, f"⚠️ {t('pull_no_ref', branch=branch)}"
-        return False, f"❌ {t('pull_error', error=err_msg)}"
+        diag = self.diagnose_remote_error(err_msg)
+        base_msg = f"❌ {t('pull_error', error=err_msg)}"
+        return False, base_msg + (f"\n💡 {diag}" if diag else "")
 
-    def one_click_sync(self, custom_msg: Optional[str] = None) -> Tuple[bool, List[str]]:
+    def one_click_sync(self, custom_msg: Optional[str] = None, exclude_paths: Optional[List[str]] = None) -> Tuple[bool, List[str]]:
         """
-        一键同步核心流程 (Pull ➔ Add -A ➔ Commit ➔ Push)
+        一键同步核心流程 (Pull ➔ Add -A ➔ [可选排除] ➔ Commit ➔ Push)
+        exclude_paths: 可选排除文件列表（git reset HEAD -- <path>，保留在工作区不提交）
         所有步骤日志纯净本地化
         """
         logs = []
@@ -315,6 +318,14 @@ class GitEngine:
                 logs.append(f"❌ {t('sync_add_failed', error=add_res.stderr)}")
                 return False, logs
 
+            # Sprint C Task 2: 可选排除文件（reset HEAD -- <path>）
+            if exclude_paths:
+                for ep in exclude_paths:
+                    ep = ep.strip()
+                    if ep:
+                        run_git(["reset", "HEAD", "--", ep], cwd=self.repo_path)
+                logs.append(f"⚠️ {t('sync_excluded_files', files=', '.join(exclude_paths))}")
+
             # 4. Commit
             commit_text = custom_msg.strip() if custom_msg and custom_msg.strip() else self.generate_smart_commit_msg()
             logs.append(f"▸ {t('sync_step_commit', msg=commit_text)}")
@@ -338,7 +349,10 @@ class GitEngine:
                 if "rejected" in err_text:
                     logs.append(f"❌ {t('sync_push_rejected')}")
                 else:
+                    diag = self.diagnose_remote_error(err_text)
                     logs.append(f"❌ {t('sync_push_failed', error=err_text)}")
+                    if diag:
+                        logs.append(f"💡 {diag}")
                 return False, logs
         else:
             logs.append(f"🎉 {t('sync_local_done')}")
@@ -714,7 +728,12 @@ class GitEngine:
         res = run_git(["ls-remote", "--exit-code", "-h", "origin"], cwd=self.repo_path)
         if res.success:
             return True, f"✅ {t('remote_test_success')}"
-        return False, f"❌ {t('remote_test_failed', error=res.stderr or res.stdout)}"
+        err_text = res.stderr or res.stdout
+        diag = self.diagnose_remote_error(err_text)
+        msg = f"❌ {t('remote_test_failed', error=err_text)}"
+        if diag:
+            msg += f"\n💡 {diag}"
+        return False, msg
 
     def get_diff(self, staged: bool = False, file_path: Optional[str] = None, color: bool = False) -> str:
         """获取工作区或暂存区的代码修改差异 (diff)"""
@@ -820,9 +839,71 @@ class GitEngine:
                 seen.add(f)
         return files
 
+    # ─────────────────────────────────────────────────────────────
+    # Sprint C Task 3: 鉴权失败人话诊断助手
+    # ─────────────────────────────────────────────────────────────
+
+    def diagnose_remote_error(self, err_text: str) -> Optional[str]:
+        """根据 git 命令 stderr 识别鉴权/网络错误并返回人话建议（全双语 t()）"""
+        if not err_text:
+            return None
+        low = err_text.lower()
+        if "permission denied (publickey)" in low or "publickey" in low:
+            return t("diag_ssh_key")
+        if any(k in low for k in ("could not read username", "authentication failed", "403", "credential")):
+            return t("diag_https_token")
+        if any(k in low for k in ("could not resolve host", "timed out", "connection refused", "unable to access")):
+            return t("diag_network")
+        return None
+
+    # ─────────────────────────────────────────────────────────────
+    # Sprint C Task 4: Reflog 紧急找回保险箱
+    # ─────────────────────────────────────────────────────────────
+
+    def list_recovery_points(self, limit: int = 8) -> List[Dict[str, str]]:
+        """解析 git reflog，返回最近 N 个可恢复节点（哈希/引用/描述/时间）"""
+        res = run_git(
+            ["reflog", f"-n{limit}", "--date=relative",
+             "--pretty=format:%h|%gd|%gs|%cr"],
+            cwd=self.repo_path
+        )
+        points = []
+        if res.success and res.stdout:
+            for line in res.stdout.splitlines():
+                parts = line.split("|", 3)
+                if len(parts) == 4:
+                    points.append({
+                        "hash": parts[0],
+                        "ref": parts[1],
+                        "action": parts[2],
+                        "when": parts[3],
+                    })
+        return points
+
+    def recover_from_reflog(self, ref_hash: str, new_branch: str) -> Tuple[bool, str]:
+        """基于 reflog 哈希拉出新分支（安全找回，不改变当前工作区）"""
+        ref_hash = ref_hash.strip()
+        new_branch = new_branch.strip()
+        if not ref_hash or not new_branch:
+            return False, t("recover_bad_args")
+        return self.create_branch_at_commit(ref_hash, new_branch)
+
+
+# 多仓库扫描时跳过的高噪音目录（极速剪枝 Sprint C Task 1）
+_SCAN_SKIP_DIRS = {
+    "node_modules", ".venv", "venv", "env",
+    "__pycache__", "build", "dist", ".dist",
+    ".pytest_cache", ".mypy_cache", ".ruff_cache",
+    "target",          # Rust / Maven
+    ".idea", ".vscode",
+    ".tox", "eggs", ".eggs",
+    "coverage", "htmlcov",
+    ".terraform",
+}
+
 
 def scan_multi_repos(base_dir: str = ".", max_depth: int = 3) -> List[Dict[str, Any]]:
-    """递归扫描子目录下所有的 Git 仓库并获取其健康状态"""
+    """递归扫描子目录下所有的 Git 仓库并获取其健康状态（已跳过 node_modules/.venv 等噪音目录）"""
     base_path = Path(base_dir).resolve()
     repo_dirs = []
 
@@ -834,9 +915,16 @@ def scan_multi_repos(base_dir: str = ".", max_depth: int = 3) -> List[Dict[str, 
         if rel_depth >= max_depth:
             dirs.clear()
             continue
-        if ".git" in dirs:
-            repo_dirs.append(Path(root))
-            dirs.remove(".git")
+        # 就地剪枝：跳过无意义的高噪音目录，避免递归深入
+        dirs[:] = [d for d in dirs if d not in _SCAN_SKIP_DIRS and not d.startswith(".")]
+        if ".git" in [d for d in os.listdir(root) if os.path.isdir(os.path.join(root, d))]:
+            # 重新检查（os.walk dirs 已过滤 ".git"，直接用 os.listdir 查）
+            pass
+        for d in list(dirs):
+            full_child = Path(root) / d
+            if (full_child / ".git").is_dir():
+                repo_dirs.append(full_child)
+                dirs.remove(d)  # 找到 git 仓库后不继续向更深层探测
 
     seen = set()
     results = []

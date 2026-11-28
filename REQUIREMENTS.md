@@ -106,3 +106,5 @@ foolgit_pkg/
 ## 7. Detailed Competitive Benchmark & Sprint C Blueprint
 
 👉 See **[docs/NEXT_ITERATION_GUIDE.md](docs/NEXT_ITERATION_GUIDE.md)** for the full 6-product market benchmark (*GitHub Desktop*, *SmartGit*, *SourceTree*, *Fork*, *Lazygit*, *VS Code + GitLens*), gap audit of the current `5,300` LOC codebase, and step-by-step **Sprint C** implementation specs (`scan_multi_repos` pruning, selective exclusion on sync, auth failure diagnostics, Reflog emergency rescue, and unified dark confirm dialogs + `PyInstaller` packaging check).
+
+> 已在 `docs/NEXT_ITERATION_GUIDE.md` 中接入完整的竞品对比、缺口诊断以及 Sprint C 开发规格书，供后续迭代参考。

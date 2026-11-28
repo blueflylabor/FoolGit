@@ -285,3 +285,62 @@ def render_diff_html(widget, raw_diff: str, empty_msg: str = "") -> None:
             widget.append(f"<span style='color: #FBBF24; font-weight: bold;'>{safe_l}</span>")
         else:
             widget.append(f"<span style='color: #D1D5DB;'>{safe_l}</span>")
+
+
+def confirm_dark_dialog(parent, title: str, message: str) -> bool:
+    """Sprint C Task 5: 统一暗黑圆角确认框，替代原生 QMessageBox.question。
+    返回 True = 用户点击「确定」，False = 点击「取消」或关闭弹窗。
+    """
+    from PyQt6.QtWidgets import QVBoxLayout, QHBoxLayout, QLabel, QPushButton
+    from foolgit_pkg.i18n import t
+
+    dlg = create_dark_dialog(parent, title, 440, 160)
+    dlg.setStyleSheet(
+        "background-color: #1C1D21; color: #F3F4F6; border-radius: 10px;"
+    )
+    layout = QVBoxLayout(dlg)
+    layout.setContentsMargins(24, 24, 24, 20)
+    layout.setSpacing(16)
+
+    lbl = QLabel(message)
+    lbl.setWordWrap(True)
+    lbl.setStyleSheet("color: #F3F4F6; font-size: 14px;")
+    layout.addWidget(lbl)
+
+    btn_row = QHBoxLayout()
+    btn_row.setSpacing(10)
+
+    btn_cancel = QPushButton(t("gui_dark_confirm_no"))
+    btn_cancel.setFixedHeight(34)
+    btn_cancel.setStyleSheet(
+        "QPushButton { background-color: #2B2C32; color: #9CA3AF; border-radius: 8px; "
+        "font-size: 13px; padding: 0 20px; }"
+        "QPushButton:hover { background-color: #35363D; }"
+    )
+
+    btn_ok = QPushButton(t("gui_dark_confirm_yes"))
+    btn_ok.setFixedHeight(34)
+    btn_ok.setStyleSheet(
+        "QPushButton { background-color: #EF4444; color: #fff; border-radius: 8px; "
+        "font-size: 13px; font-weight: bold; padding: 0 20px; }"
+        "QPushButton:hover { background-color: #DC2626; }"
+    )
+
+    btn_row.addStretch()
+    btn_row.addWidget(btn_cancel)
+    btn_row.addWidget(btn_ok)
+    layout.addLayout(btn_row)
+
+    result = [False]
+
+    def _ok():
+        result[0] = True
+        dlg.accept()
+
+    def _cancel():
+        dlg.reject()
+
+    btn_ok.clicked.connect(_ok)
+    btn_cancel.clicked.connect(_cancel)
+    dlg.exec()
+    return result[0]

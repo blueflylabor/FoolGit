@@ -305,8 +305,19 @@ class FoolGitCLI:
             rest = input(f"{BOLD}{t('commit_prefix_note_prompt', prefix=chosen_prefix)}{RESET}").strip()
             custom_msg = f"{chosen_prefix} {rest}" if rest else f"{chosen_prefix} {smart_default.replace('update: ', '')}"
 
+        # Sprint C Task 2: 可选排除文件（克制！直接回车默认全量同步）
+        info_now = engine.get_info()
+        exclude_paths: List[str] = []
+        if len(info_now.get("modified", []) + info_now.get("staged", []) + info_now.get("untracked", [])) >= 2:
+            excl_input = input(f"{BOLD}{t('sync_exclude_prompt')}{RESET}").strip()
+            if excl_input:
+                exclude_paths = [p.strip() for p in excl_input.split(",") if p.strip()]
+
         print(f"\n{t('syncing')}")
-        success, logs = engine.one_click_sync(custom_msg if custom_msg else None)
+        success, logs = engine.one_click_sync(
+            custom_msg if custom_msg else None,
+            exclude_paths=exclude_paths if exclude_paths else None
+        )
 
         print()
         for log in logs:
@@ -416,12 +427,13 @@ class FoolGitCLI:
         prompt_press_enter()
 
     def _action_undo(self, engine: GitEngine):
-        """后悔药子菜单"""
+        """后悔药子菜单（含 Sprint C Reflog 紧急找回）"""
         print(c(f"💊 {t('undo_title')}", BOLD + MAGENTA))
         print(f" [1] {t('undo_opt_all')}")
         print(f" [2] {t('undo_opt_commit')}")
         print(f" [3] {t('undo_opt_file')}")
         print(f" [4] {t('undo_opt_amend')}")
+        print(f" [5] 🆘 {t('reflog_title')}")
         print(f" {t('back_to_main')}")
         print()
 
@@ -462,6 +474,38 @@ class FoolGitCLI:
                 print(c(msg, GREEN if ok else RED))
             else:
                 print(c(t("cancelled"), YELLOW))
+        elif sub == "5":
+            self._action_reflog_rescue(engine)
+            return
+        prompt_press_enter()
+
+    def _action_reflog_rescue(self, engine: GitEngine):
+        """Sprint C Task 4: Reflog 紧急找回保险箱"""
+        points = engine.list_recovery_points(8)
+        print()
+        print(c(f"🆘 {t('reflog_title')}", BOLD + RED))
+        if not points:
+            print(c(t("reflog_empty"), YELLOW))
+            prompt_press_enter()
+            return
+        for idx, p in enumerate(points, start=1):
+            print(f"  [{idx}] {c(p['hash'], YELLOW)} {c(p['ref'], CYAN)} {BOLD}{p['action']}{RESET} {c(p['when'], DIM)}")
+        print()
+        print(f" {t('reflog_opt_recover')}")
+        print(f" {t('back_to_main')}")
+        sel = input(f"{BOLD}{t('reflog_prompt')}{RESET}").strip()
+        if sel.lower() in ("b", ""):
+            return
+        if sel.isdigit() and 1 <= int(sel) <= len(points):
+            chosen = points[int(sel) - 1]
+            bname = input(f"{BOLD}{t('reflog_branch_prompt')}{RESET}").strip()
+            if bname:
+                ok, msg = engine.recover_from_reflog(chosen["hash"], bname)
+                print(c(msg, GREEN if ok else RED))
+            else:
+                print(c(t("cancelled"), YELLOW))
+        else:
+            print(c(t("invalid_choice"), RED))
         prompt_press_enter()
 
     def _action_branch(self, engine: GitEngine):

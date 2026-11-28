@@ -455,6 +455,39 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "gui_commit_chip_docs": "docs:",
         "gui_commit_chip_chore": "chore:",
         "gui_commit_chip_refactor": "refactor:",
+
+        # Sprint C: diagnose_remote_error
+        "diag_ssh_key": (
+            "Tip: SSH key not found or not authorized. "
+            "Check your SSH agent (`ssh-add ~/.ssh/id_rsa`) or switch to an HTTPS remote URL."
+        ),
+        "diag_https_token": (
+            "Tip: HTTPS authentication failed. Create a GitHub/GitLab Personal Access Token "
+            "and store it in your OS keychain, or run `gh auth login`."
+        ),
+        "diag_network": (
+            "Tip: Cannot reach the remote host. "
+            "Check your internet connection, proxy settings, or VPN status."
+        ),
+
+        # Sprint C: sync exclude_paths
+        "sync_excluded_files": "Excluded from this commit (kept on desk): {files}",
+
+        # Sprint C: Reflog recovery
+        "reflog_title": "Emergency Recovery — Lost Commit Finder:",
+        "reflog_opt_recover": "[Enter number] Recover — create a safe new branch from that point",
+        "reflog_prompt": "Select recovery point [b to return]: ",
+        "reflog_branch_prompt": "New branch name for recovery: ",
+        "reflog_recover_ok": "Recovery branch [{branch}] created from [{hash}]! Switch to it now.",
+        "recover_bad_args": "Recovery hash and branch name are required.",
+        "reflog_empty": "No reflog entries found (fresh repo or git reflog disabled).",
+
+        # Sprint C: GUI dark confirm dialog
+        "gui_dark_confirm_yes": "Confirm",
+        "gui_dark_confirm_no": "Cancel",
+
+        # Sprint C: sync exclude prompt
+        "sync_exclude_prompt": "Exclude any file from this commit? Enter path or leave blank: ",
     },
 
     # ─────────────────────────────────────────────────────────────
@@ -904,6 +937,39 @@ TRANSLATIONS: Dict[str, Dict[str, str]] = {
         "gui_commit_chip_docs": "文档:",
         "gui_commit_chip_chore": "杂项:",
         "gui_commit_chip_refactor": "重构:",
+
+        # Sprint C: diagnose_remote_error
+        "diag_ssh_key": (
+            "提示：SSH 密钥未找到或未被授权。"
+            "请检查 SSH agent（`ssh-add ~/.ssh/id_rsa`）或改用 HTTPS 仓库地址。"
+        ),
+        "diag_https_token": (
+            "提示：HTTPS 鉴权失败。请在 GitHub/GitLab 创建 Personal Access Token "
+            "并存入系统钥匙串，或运行 `gh auth login`。"
+        ),
+        "diag_network": (
+            "提示：无法连接到远端服务器。"
+            "请检查网络连接、代理设置或 VPN 是否正常。"
+        ),
+
+        # Sprint C: sync exclude_paths
+        "sync_excluded_files": "本次未提交（保留在桌面）：{files}",
+
+        # Sprint C: Reflog recovery
+        "reflog_title": "紧急找回 — 丢失快照保险箱:",
+        "reflog_opt_recover": "[输入序号] 找回 — 从该节点安全拉出新分支",
+        "reflog_prompt": "请选择要找回的节点 [b 返回]: ",
+        "reflog_branch_prompt": "请输入找回新分支名称: ",
+        "reflog_recover_ok": "找回分支 [{branch}] 已从 [{hash}] 成功创建！可立即切换过去查看。",
+        "recover_bad_args": "找回需要提供快照哈希与新分支名。",
+        "reflog_empty": "未找到任何 reflog 记录（全新仓库或 reflog 已被清空）。",
+
+        # Sprint C: GUI dark confirm dialog
+        "gui_dark_confirm_yes": "确定",
+        "gui_dark_confirm_no": "取消",
+
+        # Sprint C: sync exclude prompt
+        "sync_exclude_prompt": "是否本次排除某个文件不提交？输入路径或直接回车: ",
     }
 }
 

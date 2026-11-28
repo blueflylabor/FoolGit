@@ -10,7 +10,7 @@ import unittest
 from pathlib import Path
 
 from foolgit_pkg.config import ConfigManager
-from foolgit_pkg.core import GitEngine, parse_custom_git_args, run_git
+from foolgit_pkg.core import GitEngine, parse_custom_git_args, run_git, scan_multi_repos, _SCAN_SKIP_DIRS
 from foolgit_pkg.i18n import TRANSLATIONS, set_language, t
 from foolgit_pkg.presets import ALL_PRESET_IDS, DEFAULT_ACTIVE_IDS, get_preset_info
 
@@ -234,6 +234,126 @@ class TestCliEntry(unittest.TestCase):
             text=True,
         )
         self.assertEqual(res_s.returncode, 0)
+
+
+if __name__ == "__main__":
+    unittest.main()
+
+
+class TestSprintC(unittest.TestCase):
+    """Sprint C 新功能回归测试"""
+
+    def setUp(self):
+        set_language("en")
+        self.tmp_dir = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp_dir.name)
+        self.repo = self.root / "work"
+        self.repo.mkdir()
+        run_git(["init"], cwd=str(self.repo))
+        run_git(["config", "user.email", "t@e.com"], cwd=str(self.repo))
+        run_git(["config", "user.name", "T"], cwd=str(self.repo))
+        (self.repo / "main.py").write_text("v1\n", encoding="utf-8")
+        run_git(["add", "-A"], cwd=str(self.repo))
+        run_git(["commit", "-m", "init"], cwd=str(self.repo))
+        self.engine = GitEngine(str(self.repo))
+
+    def tearDown(self):
+        self.tmp_dir.cleanup()
+
+    # ── Task 1: scan_multi_repos 剪枝 ───────────────────────────────
+    def test_scan_skip_dirs_defined(self):
+        """_SCAN_SKIP_DIRS 必须包含 node_modules 和 .venv"""
+        from foolgit_pkg.core import _SCAN_SKIP_DIRS
+        self.assertIn("node_modules", _SCAN_SKIP_DIRS)
+        self.assertIn(".venv", _SCAN_SKIP_DIRS)
+        self.assertIn("__pycache__", _SCAN_SKIP_DIRS)
+
+    def test_scan_skips_noise_directories(self):
+        """scan_multi_repos 不应进入 node_modules 子仓库"""
+        # 创建噪音目录内的 git 仓库（真实扫描应跳过）
+        noise = self.root / "node_modules" / "some-pkg"
+        noise.mkdir(parents=True)
+        run_git(["init"], cwd=str(noise))
+        repos = scan_multi_repos(str(self.root), max_depth=4)
+        paths = [r["path"] for r in repos]
+        self.assertFalse(any("node_modules" in p for p in paths),
+                         f"node_modules repo found in results: {paths}")
+
+    def test_scan_finds_real_repo(self):
+        """scan_multi_repos 能正常找到真实仓库"""
+        repos = scan_multi_repos(str(self.root), max_depth=3)
+        paths = [r["path"] for r in repos]
+        self.assertTrue(any(str(self.repo) in p or p == str(self.repo) for p in paths),
+                        f"Real repo not found in {paths}")
+
+    # ── Task 2: exclude_paths ──────────────────────────────────────
+    def test_one_click_sync_exclude_paths(self):
+        """sync 时 exclude_paths 对应文件不被提交，仍留在工作区"""
+        (self.repo / "keep.py").write_text("temp\n", encoding="utf-8")
+        (self.repo / "commit.py").write_text("real\n", encoding="utf-8")
+        ok, logs = self.engine.one_click_sync("test exclude", exclude_paths=["keep.py"])
+        self.assertTrue(ok, logs)
+        # keep.py 仍在工作区（未暂存状态）
+        self.assertTrue((self.repo / "keep.py").exists())
+        status = run_git(["status", "--porcelain"], cwd=str(self.repo))
+        self.assertIn("keep.py", status.stdout)
+
+    # ── Task 3: diagnose_remote_error ──────────────────────────────
+    def test_diagnose_ssh_error(self):
+        msg = self.engine.diagnose_remote_error("Permission denied (publickey)")
+        self.assertIsNotNone(msg)
+        self.assertIn("SSH", msg)
+
+    def test_diagnose_https_error(self):
+        msg = self.engine.diagnose_remote_error("Authentication failed for 'https://github.com'")
+        self.assertIsNotNone(msg)
+        self.assertIn("Token", msg.replace("token", "Token"))
+
+    def test_diagnose_network_error(self):
+        msg = self.engine.diagnose_remote_error("Could not resolve host: github.com")
+        self.assertIsNotNone(msg)
+        self.assertTrue(
+            any(w in msg.lower() for w in ("network", "internet", "connection", "host")),
+            f"Expected network-related hint, got: {msg}"
+        )
+
+    def test_diagnose_no_error(self):
+        msg = self.engine.diagnose_remote_error("")
+        self.assertIsNone(msg)
+
+    # ── Task 4: list_recovery_points / recover_from_reflog ─────────
+    def test_list_recovery_points(self):
+        """首次提交后 reflog 应至少有一条记录"""
+        (self.repo / "main.py").write_text("v2\n", encoding="utf-8")
+        run_git(["commit", "-am", "second"], cwd=str(self.repo))
+        points = self.engine.list_recovery_points(5)
+        self.assertGreaterEqual(len(points), 1)
+        self.assertIn("hash", points[0])
+        self.assertIn("action", points[0])
+
+    def test_recover_from_reflog(self):
+        """recover_from_reflog 能基于 reflog hash 创建新分支"""
+        points = self.engine.list_recovery_points(3)
+        self.assertTrue(points)
+        ok, msg = self.engine.recover_from_reflog(points[0]["hash"], "recovered-branch")
+        self.assertTrue(ok, msg)
+        branches = [b["name"] for b in self.engine.list_branches()]
+        self.assertIn("recovered-branch", branches)
+
+    # ── i18n 新词条对等性 ───────────────────────────────────────────
+    def test_sprint_c_i18n_parity(self):
+        """Sprint C 新增的所有 i18n key 在 EN/ZH 两节均存在"""
+        new_keys = [
+            "diag_ssh_key", "diag_https_token", "diag_network",
+            "sync_excluded_files", "sync_exclude_prompt",
+            "reflog_title", "reflog_opt_recover", "reflog_prompt",
+            "reflog_branch_prompt", "reflog_recover_ok",
+            "recover_bad_args", "reflog_empty",
+            "gui_dark_confirm_yes", "gui_dark_confirm_no",
+        ]
+        for key in new_keys:
+            self.assertIn(key, TRANSLATIONS["en"], f"Missing EN key: {key}")
+            self.assertIn(key, TRANSLATIONS["zh"], f"Missing ZH key: {key}")
 
 
 if __name__ == "__main__":
