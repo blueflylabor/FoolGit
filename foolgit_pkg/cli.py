@@ -8,7 +8,7 @@ import sys
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
-from .core import GitEngine, is_git_repo, scan_multi_repos, run_git
+from .core import GitEngine, is_git_repo, scan_multi_repos, run_git, parse_custom_git_args
 from .config import ConfigManager
 from .presets import get_preset_info, ALL_PRESET_IDS
 from .i18n import t, get_language
@@ -179,16 +179,17 @@ class FoolGitCLI:
         print()
         if itype == "custom":
             raw_cmd = item["raw_cmd"]
-            print(c(f"🚀 Running: {raw_cmd}", BOLD + CYAN))
-            res = run_git(raw_cmd.replace("git ", "").split(), cwd=engine.repo_path)
+            print(c(t("custom_running", cmd=raw_cmd), BOLD + CYAN))
+            args = parse_custom_git_args(raw_cmd)
+            res = run_git(args, cwd=engine.repo_path)
             if res.stdout:
                 print(res.stdout)
             if res.stderr:
                 print(c(res.stderr, YELLOW if res.success else RED))
             if res.success:
-                print(c("✅ OK", GREEN))
+                print(c(t("custom_ok"), GREEN))
             else:
-                print(c("❌ Failed", RED))
+                print(c(t("custom_failed"), RED))
             prompt_press_enter()
             return
 
@@ -219,12 +220,28 @@ class FoolGitCLI:
         elif item_id == "gitignore":
             self._action_gitignore(engine)
         else:
-            print(c(f"Feature [{item_id}] not found.", RED))
+            print(c(t("feature_not_found", id=item_id), RED))
             prompt_press_enter()
 
     # ─────────────────────────────────────────────────────────
     # 核心动作
     # ─────────────────────────────────────────────────────────
+
+    def _ensure_git_identity(self, engine: GitEngine):
+        """首次提交前引导配置 Git 作者身份，避免报 Author identity unknown"""
+        has_id, _, _ = engine.check_git_identity()
+        if has_id:
+            return
+        print()
+        print(c(f"🪪 {t('identity_missing_title')}", BOLD + YELLOW))
+        print(f"  {t('identity_missing_desc')}")
+        name = input(f"{BOLD}{t('identity_name_prompt')}{RESET}").strip()
+        email = input(f"{BOLD}{t('identity_email_prompt')}{RESET}").strip()
+        if name and email:
+            ok, msg = engine.set_git_identity(name, email)
+            print(c(msg, GREEN if ok else RED))
+        else:
+            print(c(t("identity_skipped"), YELLOW))
 
     def _action_sync(self, engine: GitEngine):
         """一键保存并同步"""
@@ -233,6 +250,8 @@ class FoolGitCLI:
         print(c("══════════════════════════════════════════", CYAN))
         print(f"💡 {t('sync_tip')}")
         print(f"▸  {c(t('sync_preview_label') + ': ' + engine.get_sync_preview(), CYAN)}")
+
+        self._ensure_git_identity(engine)
 
         risks = engine.check_sync_risks()
         if risks["has_risk"]:
@@ -278,6 +297,16 @@ class FoolGitCLI:
             print(c(msg, GREEN))
         else:
             print(c(msg, RED if "❌" in msg else YELLOW))
+            if engine.is_pull_blocked_by_local_changes(msg):
+                print()
+                print(c(f"🔒 {t('pull_blocked_local')}", YELLOW))
+                lock_ans = input(f"{BOLD}{t('pull_auto_locker_prompt')}{RESET}").strip().lower()
+                if lock_ans == "l":
+                    al_ok, al_logs = engine.auto_locker_pull()
+                    for al in al_logs:
+                        print(f"  {al}")
+                    if not al_ok and engine.get_conflict_files():
+                        msg = al_logs[-1]
             while True:
                 conflicts = engine.get_conflict_files()
                 if not conflicts:
@@ -847,7 +876,7 @@ class FoolGitCLI:
         print(c(t("remove_custom_title"), BOLD + RED))
         for idx, item in enumerate(cmds, start=1):
             print(f"  [{idx}] {item['name']} ({item['cmd']})")
-        choice = input(f"{BOLD}Number [b to return]: {RESET}").strip()
+        choice = input(f"{BOLD}{t('select_number_back_prompt')}{RESET}").strip()
         if choice.isdigit():
             idx = int(choice)
             if 1 <= idx <= len(cmds):
@@ -876,24 +905,24 @@ class FoolGitCLI:
             print(f" {t('clone_repo_opt')}")
             print(f" [q] {t('menu_quit')}")
             print()
-            c_input = input(f"{BOLD}Select [1/2, q]: {RESET}").strip()
+            c_input = input(f"{BOLD}{t('non_git_select_prompt')}{RESET}").strip()
             if c_input == "1":
                 res = run_git(["init"], cwd=self.target_dir)
                 if res.success:
-                    print(c("🎉 Init OK!", GREEN))
+                    print(c(t("init_ok_msg"), GREEN))
                     prompt_press_enter()
                     self._run_single_repo_menu()
                 else:
-                    print(c(f"Init failed: {res.stderr}", RED))
+                    print(c(t("init_fail_msg", error=res.stderr), RED))
             elif c_input == "2":
                 url = input(t("clone_url_prompt")).strip()
                 if url:
-                    print(f"Cloning {url} ...")
+                    print(t("cloning_msg", url=url))
                     cres = run_git(["clone", url], cwd=self.target_dir)
                     if cres.success:
-                        print(c("🎉 Cloned successfully!", GREEN))
+                        print(c(t("clone_ok_msg"), GREEN))
                     else:
-                        print(c(f"❌ Clone failed: {cres.stderr}", RED))
+                        print(c(t("clone_fail_msg", error=cres.stderr), RED))
                 prompt_press_enter()
 
     def _handle_multi_repo_view(self, repos: Optional[List[Dict[str, Any]]] = None):
@@ -901,7 +930,7 @@ class FoolGitCLI:
             repos = scan_multi_repos(self.target_dir)
 
         if not repos:
-            print(c("No Git repositories found.", YELLOW))
+            print(c(t("no_repos_found"), YELLOW))
             prompt_press_enter()
             return
 
@@ -919,7 +948,7 @@ class FoolGitCLI:
         print(f"  {t('back_to_main')}")
         print()
 
-        choice = input(f"{BOLD}Select option: {RESET}").strip()
+        choice = input(f"{BOLD}{t('select_option_prompt')}{RESET}").strip()
         if choice.lower() in ["b", ""]:
             return
         elif choice.lower() == "a":

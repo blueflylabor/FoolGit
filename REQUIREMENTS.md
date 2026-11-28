@@ -89,14 +89,14 @@ foolgit_pkg/
 
 ## 6. Next-Iteration Development Backlog (Prioritized)
 
-### Sprint A — CLI & Core Hardening (Next Task 🎯)
-1. **Subprocess Safety (`core.py`)**: Add configurable `timeout` (e.g., 30s for local, 60s for network) + `GIT_TERMINAL_PROMPT=0` env to prevent hangs; fix `porcelain=v2` `u ` & `2 ` parsing; use `shlex.split()` for custom commands.
-2. **First-Run Identity Onboarding (`core.py` + `cli.py`)**: Detect missing `user.name`/`user.email` before commit and offer a 2-question plain-language setup.
-3. **Auto-Locker Pull Rescue (`core.py` + `cli.py`)**: When `safe_pull()` is blocked by local edits, offer 1-key **"Lock WIP → Pull → Restore WIP"**.
-4. **100% i18n Cleanup (`cli.py` + `cli_entry.py`)**: Replace every remaining hardcoded English string in non-git, multi-repo, and one-shot CLI paths with `t()`.
-5. **Automated Test Suite (`tests/` + `Makefile`)**: Add `make test` running unit + temp-repo integration tests for `core.py`, `config.py`, `i18n.py`, and `cli_entry.py`.
+### Sprint A — CLI & Core Hardening (Completed ✅)
+1. [x] **Subprocess Safety (`core.py`)**: Added network/local timeouts + `GIT_TERMINAL_PROMPT=0` env guard; fixed `porcelain=v2` `u ` & `2 ` parsing; switched custom commands to `shlex.split()` via `parse_custom_git_args()`.
+2. [x] **First-Run Identity Onboarding (`core.py` + `cli.py` + `gui`)**: Detects missing `user.name`/`user.email` before sync/commit and guides setup in plain language.
+3. [x] **Auto-Locker Pull Rescue (`core.py` + `cli.py` + `gui`)**: Detects pull blocked by local edits and offers 1-key **"Lock WIP → Pull → Restore WIP"** (`auto_locker_pull()`).
+4. [x] **100% i18n Cleanup (`cli.py` + `cli_entry.py` + `gui`)**: Replaced all remaining hardcoded English strings in non-git, multi-repo, remote test, and one-shot CLI flows with `t()`.
+5. [x] **Automated Test Suite (`tests/test_foolgit.py` + `Makefile`)**: Added stdlib `unittest` suite wired to `make test`.
 
-### Sprint B — GUI Modularization & Beautification (Following Sprint 🎨)
-1. **Modularize `gui.py`** into `foolgit_pkg/gui/` (`theme.py`, `widgets.py`, `dialogs.py`, `window.py`).
-2. **Visual Polish**: Refined spacing, custom SVG/QIcon action badges, unified status cards matching the new CLI metaphors (*Undo Pills*, *Temporary Locker*, *Parallel Worlds*, *Time Machine*), and smooth progress feedback.
-3. **Distribution**: One-click PR/Compare link (`🔀 Create PR`), macOS `.app` (`--onedir`), and Homebrew formula.
+### Sprint B — GUI Modularization, Beautification & Distribution
+1. [x] **Modularize `gui.py`** into `foolgit_pkg/gui/` (`theme.py`, `dialogs.py`, `window.py`, `__init__.py`), sharing `create_dark_dialog` & `render_diff_html` helpers and dark scrollbars.
+2. [x] **Visual & Metaphor Parity**: Aligned GUI dialogs with CLI metaphors (*Undo Pills*, *Temporary Locker* with live diff peek, *Parallel Worlds*, *Time Machine* with Compare/Branch/Revert) and added one-click `🔀 Create PR` (`get_pr_compare_url()`).
+3. [ ] **Distribution**: macOS `.app` (`--onedir`) & Homebrew formula tap for zero-config installation.

@@ -5,12 +5,26 @@ FoolGit 核心执行引擎
 """
 
 import os
+import shlex
 import subprocess
 from datetime import datetime
 from pathlib import Path
 from typing import Dict, List, Optional, Tuple, Any
 
 from .i18n import t
+
+_NETWORK_GIT_SUBCMDS = {"pull", "push", "fetch", "clone", "ls-remote"}
+
+
+def parse_custom_git_args(raw_cmd: str) -> List[str]:
+    """安全解析自定义 Git 命令参数（支持引号参数）"""
+    try:
+        tokens = shlex.split(raw_cmd.strip())
+    except ValueError:
+        tokens = raw_cmd.strip().split()
+    if tokens and tokens[0].lower() == "git":
+        tokens = tokens[1:]
+    return tokens
 
 
 class GitResult:
@@ -30,20 +44,31 @@ class GitResult:
         return self.stdout if self.stdout else self.stderr
 
 
-def run_git(args: List[str], cwd: str = ".") -> GitResult:
-    """在指定目录安全执行 git 命令并捕获输出"""
+def run_git(args: List[str], cwd: str = ".", timeout: Optional[int] = None) -> GitResult:
+    """在指定目录安全执行 git 命令（带超时与非交互终端保护）并捕获输出"""
     full_cmd = ["git"] + args
+    if timeout is None:
+        subcmd = args[0].lower() if args else ""
+        timeout = 60 if subcmd in _NETWORK_GIT_SUBCMDS else 30
+
+    env = os.environ.copy()
+    env.setdefault("GIT_TERMINAL_PROMPT", "0")
+
     try:
         proc = subprocess.run(
             full_cmd,
             cwd=cwd,
+            env=env,
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
             text=True,
             encoding="utf-8",
             errors="replace",
+            timeout=timeout,
         )
         return GitResult(proc.returncode, proc.stdout, proc.stderr, " ".join(full_cmd))
+    except subprocess.TimeoutExpired:
+        return GitResult(-2, "", t("git_timeout_error", seconds=timeout), " ".join(full_cmd))
     except Exception as e:
         return GitResult(-1, "", str(e), " ".join(full_cmd))
 
@@ -90,6 +115,19 @@ class GitEngine:
             url = url[:-4]
         return url if url.startswith("http://") or url.startswith("https://") else ""
 
+    def get_pr_compare_url(self) -> str:
+        """如果当前处于功能分支，生成一键创建 PR / 对比页面的网页链接"""
+        web_url = self.get_remote_web_url()
+        if not web_url:
+            return ""
+        info = self.get_info()
+        branch = info["branch"]
+        if branch in ("main", "master", "HEAD", "(detached)"):
+            return ""
+        if "gitlab" in web_url.lower():
+            return f"{web_url}/-/merge_requests/new?merge_request[source_branch]={branch}"
+        return f"{web_url}/compare/{branch}?expand=1"
+
     def get_info(self) -> Dict[str, Any]:
         """获取仓库当前详细健康状况与状态指标 (使用 porcelain=v2 单次高效解析)"""
         status_res = run_git(["status", "--porcelain=v2", "--branch"], cwd=self.repo_path)
@@ -102,6 +140,7 @@ class GitEngine:
         modified_files = []
         untracked_files = []
         staged_files = []
+        conflict_files = []
 
         if status_res.success and status_res.stdout:
             for line in status_res.stdout.splitlines():
@@ -120,8 +159,7 @@ class GitEngine:
                             ahead = int(p[1:])
                         elif p.startswith("-"):
                             behind = int(p[1:])
-                elif line.startswith("1 ") or line.startswith("2 "):
-                    # 1 <XY> ... <path>
+                elif line.startswith("1 "):
                     parts = line.split(maxsplit=8)
                     if len(parts) >= 9:
                         xy = parts[1]
@@ -130,10 +168,25 @@ class GitEngine:
                             staged_files.append(fname)
                         if xy[1] != ".":
                             modified_files.append(fname)
+                elif line.startswith("2 "):
+                    # 2 <XY> ... <Xscore> <path>\t<origPath>
+                    parts = line.split(maxsplit=9)
+                    if len(parts) >= 10:
+                        xy = parts[1]
+                        fname = parts[9].split("\t", 1)[0]
+                        if xy[0] != ".":
+                            staged_files.append(fname)
+                        if xy[1] != ".":
+                            modified_files.append(fname)
+                elif line.startswith("u "):
+                    # u <XY> ... <path> (unmerged conflict entry)
+                    parts = line.split(maxsplit=10)
+                    if len(parts) >= 11:
+                        conflict_files.append(parts[10])
                 elif line.startswith("? "):
                     untracked_files.append(line[2:].strip())
 
-        total_changes = len(modified_files) + len(untracked_files) + len(staged_files)
+        total_changes = len(modified_files) + len(untracked_files) + len(staged_files) + len(conflict_files)
         repo_name = Path(self.repo_path).name
 
         return {
@@ -149,8 +202,62 @@ class GitEngine:
             "modified": modified_files,
             "untracked": untracked_files,
             "staged": staged_files,
+            "conflicts": conflict_files,
             "remote_url": "origin" if has_upstream else self.get_remote_url(),
         }
+
+    def check_git_identity(self) -> Tuple[bool, str, str]:
+        """检测是否已配置 Git 提交身份 (user.name 与 user.email)"""
+        n_res = run_git(["config", "user.name"], cwd=self.repo_path)
+        e_res = run_git(["config", "user.email"], cwd=self.repo_path)
+        name = n_res.stdout.strip() if n_res.success else ""
+        email = e_res.stdout.strip() if e_res.success else ""
+        return bool(name and email), name, email
+
+    def set_git_identity(self, name: str, email: str, global_scope: bool = False) -> Tuple[bool, str]:
+        """写入本地或全局 Git 提交身份"""
+        name, email = name.strip(), email.strip()
+        if not name or not email:
+            return False, t("identity_invalid")
+        scope_args = ["--global"] if global_scope else []
+        r1 = run_git(["config", *scope_args, "user.name", name], cwd=self.repo_path)
+        r2 = run_git(["config", *scope_args, "user.email", email], cwd=self.repo_path)
+        if r1.success and r2.success:
+            return True, f"✅ {t('identity_saved', name=name, email=email)}"
+        return False, f"❌ {r1.stderr or r2.stderr}"
+
+    @staticmethod
+    def is_pull_blocked_by_local_changes(err_text: str) -> bool:
+        """判断拉取失败是否因本地未保存修改会覆盖冲突引起"""
+        low = err_text.lower()
+        return (
+            "would be overwritten by merge" in low
+            or "unstaged changes" in low
+            or "commit your changes or stash them" in low
+        )
+
+    def auto_locker_pull(self) -> Tuple[bool, List[str]]:
+        """自动储物柜拉取：锁存本地改动 -> 安全拉取 -> 恢复本地改动"""
+        logs = []
+        logs.append(f"🔒 {t('pull_auto_locker_step_save')}")
+        ok_save, msg_save = self.stash_save("FoolGit Auto-Locker before pull")
+        logs.append(msg_save)
+        if not ok_save:
+            return False, logs
+
+        logs.append(f"⬇️ {t('pull_auto_locker_step_pull')}")
+        ok_pull, msg_pull = self.safe_pull()
+        logs.append(msg_pull)
+        if not ok_pull:
+            return False, logs
+
+        logs.append(f"🔓 {t('pull_auto_locker_step_pop')}")
+        ok_pop, msg_pop = self.stash_pop()
+        logs.append(msg_pop)
+        if not ok_pop:
+            logs.append(f"⚠️ {t('pull_auto_locker_pop_conflict')}")
+            return False, logs
+        return True, logs
 
     def safe_pull(self) -> Tuple[bool, str]:
         """安全拉取最新代码并给出通俗多语言反馈"""

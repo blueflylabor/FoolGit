@@ -34,7 +34,7 @@ uninstall:
 	./uninstall.sh
 
 test:
-	python3 -c "from foolgit_pkg.core import is_git_repo; print('Self check:', is_git_repo('.'))"
+	python3 -m unittest discover -s tests -v
 
 clean:
 	rm -rf build dist *.spec

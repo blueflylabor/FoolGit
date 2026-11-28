@@ -55,9 +55,10 @@ def main():
     if args and args[0] in ("sync", "pull", "status", "s"):
         from .config import ConfigManager
         from .core import GitEngine, is_git_repo
+        from .i18n import t
         ConfigManager()
         if not is_git_repo("."):
-            print("❌ Current directory is not a Git repository.")
+            print(t("not_git_error"))
             sys.exit(1)
         eng = GitEngine(".")
         subcmd = args[0]
