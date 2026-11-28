@@ -357,6 +357,16 @@ class GitEngine:
             return True, f"🗑️ {t('stash_dropped', ref=ref)}"
         return False, f"❌ {res.stderr or res.stdout}"
 
+    def get_stash_diff(self, index: int = 0, color: bool = True) -> str:
+        """偷看储物柜里某条暂存具体存了哪些改动"""
+        ref = f"stash@{{{index}}}"
+        cmd = ["stash", "show", "-p"]
+        if color:
+            cmd.append("--color=always")
+        cmd.append(ref)
+        res = run_git(cmd, cwd=self.repo_path)
+        return res.stdout if res.success else (res.stderr or "")
+
     def amend_commit_message(self, new_msg: str) -> Tuple[bool, str]:
         """修改上一次提交的说明（amend）"""
         new_msg = new_msg.strip()
@@ -615,6 +625,15 @@ class GitEngine:
         """获取具体某次提交的详细改动与元数据"""
         res = run_git(["show", "--stat", "-p", commit_hash.strip()], cwd=self.repo_path)
         return res.stdout if res.success else res.stderr
+
+    def diff_against_commit(self, commit_hash: str, color: bool = True) -> str:
+        """对比历史某次快照与当前工作区文件夹的差异"""
+        cmd = ["diff"]
+        if color:
+            cmd.append("--color=always")
+        cmd.append(commit_hash.strip())
+        res = run_git(cmd, cwd=self.repo_path)
+        return res.stdout if res.success else (res.stderr or "")
 
     def get_sync_preview(self) -> str:
         """生成同步前的一句话动作预览，让用户心里有底"""

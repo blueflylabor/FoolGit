@@ -100,6 +100,7 @@ class FoolGitCLI:
             info = engine.get_info()
 
             self._render_header(info)
+            print(f" {c('💡 ' + t('sync_preview_label') + ':', BOLD)} {c(engine.get_sync_preview(), CYAN)}\n")
 
             active_ids = self.config_mgr.get_active_preset_ids()
             custom_cmds = self.config_mgr.get_custom_commands()
@@ -231,6 +232,7 @@ class FoolGitCLI:
         print(c(f"  🚀 {t('sync_banner')}", BOLD + GREEN))
         print(c("══════════════════════════════════════════", CYAN))
         print(f"💡 {t('sync_tip')}")
+        print(f"▸  {c(t('sync_preview_label') + ': ' + engine.get_sync_preview(), CYAN)}")
 
         risks = engine.check_sync_risks()
         if risks["has_risk"]:
@@ -473,11 +475,16 @@ class FoolGitCLI:
                 chosen_idx = int(sel) - 1
                 chosen = stashes[chosen_idx]
                 print(f"\n  {c(chosen['ref'], YELLOW)}: {chosen['desc']}")
+                print(f"  {t('stash_entry_opt_peek')}")
                 print(f"  {t('stash_entry_opt_apply')}")
                 print(f"  {t('stash_entry_opt_drop')}")
                 print(f"  {t('stash_entry_opt_back')}")
                 action = input(f"{BOLD}{t('stash_entry_prompt')}{RESET}").strip().lower()
-                if action == "a":
+                if action == "p":
+                    diff_out = engine.get_stash_diff(chosen_idx, color=True)
+                    print("\n" + (diff_out if diff_out else c(t("no_diff"), DIM)))
+                    prompt_press_enter()
+                elif action == "a":
                     ok, msg = engine.stash_apply(chosen_idx)
                     print(c(msg, GREEN if ok else RED))
                     prompt_press_enter()
@@ -502,8 +509,9 @@ class FoolGitCLI:
             parts = item.split("|")
             if len(parts) >= 4:
                 h, author, when, msg = parts[0], parts[1], parts[2], parts[3]
+                deco = f" {c(parts[4].strip(), GREEN)}" if len(parts) >= 5 and parts[4].strip() else ""
                 commit_hashes.append(h)
-                print(f"  [{idx}] {c(h, YELLOW)} {BOLD}{msg}{RESET} {c('(' + when + ' by ' + author + ')', DIM)}")
+                print(f"  [{idx}] {c('●', CYAN)} {c(h, YELLOW)}{deco} {BOLD}{msg}{RESET} {c('(' + when + ' · ' + author + ')', DIM)}")
             else:
                 commit_hashes.append(item.split()[0] if item.split() else "")
                 print(f"  [{idx}] {item}")
@@ -518,7 +526,12 @@ class FoolGitCLI:
             print(detail)
             print()
             act = input(f"{BOLD}{t('history_cli_action_prompt')}{RESET}").strip().lower()
-            if act == "r":
+            if act == "c":
+                print()
+                print(c(f"─── {t('history_cli_compare_title', commit=target_hash)} ───", BOLD + CYAN))
+                cmp_diff = engine.diff_against_commit(target_hash, color=True)
+                print(cmp_diff if cmp_diff else c(t("history_cli_compare_clean", commit=target_hash), GREEN))
+            elif act == "r":
                 conf = input(c(t("time_machine_revert_confirm", commit=target_hash) + " (y/n): ", YELLOW)).strip().lower()
                 if conf == "y":
                     ok, msg = engine.revert_commit(target_hash)
