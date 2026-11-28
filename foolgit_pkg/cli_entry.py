@@ -10,23 +10,31 @@ from .cli import FoolGitCLI
 
 
 def main():
-    target_dir = sys.argv[1] if len(sys.argv) > 1 and not sys.argv[1].startswith("-") else "."
+    args = sys.argv[1:]
 
-    if "-v" in sys.argv or "--version" in sys.argv:
+    if "-v" in args or "--version" in args:
         print(f"FoolGit version {__version__}")
         sys.exit(0)
 
-    if "-h" in sys.argv or "--help" in sys.argv:
+    if "-h" in args or "--help" in args:
         print("FoolGit - Simple & Foolproof Git Assistant")
-        print("Usage: foolgit [path] [options]")
+        print("Usage: foolgit [path | command] [options]")
+        print("Commands:")
+        print("  sync [msg]     One-click pull, add, commit & push")
+        print("  pull           Safely pull latest remote updates")
+        print("  status | s     Show concise repo status & sync preview")
+        print("  gui            Launch PyQt6 lightweight desktop GUI")
         print("Options:")
         print("  -g, --gui      Launch PyQt6 lightweight desktop GUI")
         print("  -v, --version  Show version number")
         print("  -h, --help     Show this help message")
-        print("\nRun 'foolgit' directly inside any Git repository to start.")
+        print("\nRun 'foolgit' directly inside any Git repository for interactive menu.")
         sys.exit(0)
 
-    if "-g" in sys.argv or "--gui" in sys.argv:
+    if "-g" in args or "--gui" in args or (args and args[0] == "gui"):
+        target_dir = args[1] if (args and args[0] == "gui" and len(args) > 1) else (
+            args[0] if (args and not args[0].startswith("-") and args[0] != "gui") else "."
+        )
         try:
             import PyQt6
         except ImportError:
@@ -43,6 +51,34 @@ def main():
         gui_mod.launch_gui(target_dir=target_dir)
         sys.exit(0)
 
+    # One-shot fast CLI subcommands (sync / pull / status / s)
+    if args and args[0] in ("sync", "pull", "status", "s"):
+        from .config import ConfigManager
+        from .core import GitEngine, is_git_repo
+        ConfigManager()
+        if not is_git_repo("."):
+            print("❌ Current directory is not a Git repository.")
+            sys.exit(1)
+        eng = GitEngine(".")
+        subcmd = args[0]
+        if subcmd == "sync":
+            msg = " ".join(args[1:]).strip() or None
+            ok, logs = eng.one_click_sync(msg)
+            for l in logs:
+                print(l)
+            sys.exit(0 if ok else 1)
+        elif subcmd == "pull":
+            ok, msg = eng.safe_pull()
+            print(msg)
+            sys.exit(0 if ok else 1)
+        else:
+            info = eng.get_info()
+            oid = f" ({info['commit_oid']})" if info.get("commit_oid") else ""
+            print(f"📁 {info['name']}  🌿 {info['branch']}{oid}")
+            print(f"⚡ {eng.get_sync_preview()}")
+            sys.exit(0)
+
+    target_dir = args[0] if args and not args[0].startswith("-") else "."
     cli = FoolGitCLI(target_dir=target_dir)
     cli.run()
 

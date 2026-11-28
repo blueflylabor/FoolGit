@@ -43,6 +43,7 @@ def get_default_config() -> Dict[str, Any]:
         "language": DEFAULT_LANG,  # "en" 默认英文
         "active_preset_ids": list(DEFAULT_ACTIVE_IDS),
         "custom_commands": [],
+        "recent_repos": [],
         "settings": {
             "default_commit_prefix": "update: ",
             "auto_pull_before_push": True,
@@ -175,3 +176,18 @@ class ConfigManager:
         """重置回出厂默认状态"""
         self.save(get_default_config())
         set_language(DEFAULT_LANG)
+
+    def get_recent_repos(self) -> List[str]:
+        """获取最近打开的 Git 仓库路径列表（过滤已不存在的目录）"""
+        cfg = self.load()
+        repos = cfg.get("recent_repos", [])
+        return [p for p in repos if Path(p).is_dir()]
+
+    def add_recent_repo(self, repo_path: str, max_items: int = 8) -> None:
+        """将当前仓库置顶记录到最近仓库列表"""
+        resolved = str(Path(repo_path).resolve())
+        cfg = self.load()
+        repos = [p for p in cfg.get("recent_repos", []) if p != resolved and Path(p).is_dir()]
+        repos.insert(0, resolved)
+        cfg["recent_repos"] = repos[:max_items]
+        self.save(cfg)

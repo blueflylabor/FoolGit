@@ -616,6 +616,65 @@ class GitEngine:
         res = run_git(["show", "--stat", "-p", commit_hash.strip()], cwd=self.repo_path)
         return res.stdout if res.success else res.stderr
 
+    def get_sync_preview(self) -> str:
+        """生成同步前的一句话动作预览，让用户心里有底"""
+        info = self.get_info()
+        branch = info["branch"]
+        has_remote = bool(info["remote_url"])
+        changes = info["total_changes"]
+        ahead = info["ahead"]
+
+        if info["is_clean"] and ahead == 0 and info["behind"] == 0:
+            return t("sync_preview_clean")
+
+        steps = []
+        if has_remote:
+            steps.append(t("sync_preview_pull", branch=branch))
+        if changes > 0:
+            steps.append(t("sync_preview_commit", count=changes))
+        if has_remote and (changes > 0 or ahead > 0):
+            steps.append(t("sync_preview_push", branch=branch))
+        elif not has_remote and changes > 0:
+            steps.append(t("sync_preview_local_only"))
+
+        if not steps:
+            return t("sync_preview_clean")
+        return " → ".join(steps)
+
+    def fetch_remote_status(self) -> Tuple[bool, int]:
+        """后台轻量探测远端更新数量（不修改工作区）"""
+        info = self.get_info()
+        if not info["remote_url"]:
+            return False, 0
+        res = run_git(["fetch", "origin", "--quiet"], cwd=self.repo_path)
+        if not res.success:
+            return False, 0
+        updated = self.get_info()
+        return True, updated["behind"]
+
+    def revert_commit(self, commit_hash: str) -> Tuple[bool, str]:
+        """安全回退指定提交（生成反向新提交，不抹除历史）"""
+        commit_hash = commit_hash.strip()
+        if not commit_hash:
+            return False, "Commit hash required."
+        res = run_git(["revert", "--no-edit", commit_hash], cwd=self.repo_path)
+        if res.success:
+            return True, f"✅ {t('time_machine_revert_ok', commit=commit_hash)}"
+        # 若 revert 产生冲突，自动中止保持工作区干净
+        run_git(["revert", "--abort"], cwd=self.repo_path)
+        return False, f"❌ {t('time_machine_revert_fail', error=res.stderr or res.stdout)}"
+
+    def create_branch_at_commit(self, commit_hash: str, branch_name: str) -> Tuple[bool, str]:
+        """基于历史某次提交创建并切换到新分支（安全时光机副本）"""
+        commit_hash = commit_hash.strip()
+        branch_name = branch_name.strip()
+        if not commit_hash or not branch_name:
+            return False, "Commit hash and branch name are required."
+        res = run_git(["checkout", "-b", branch_name, commit_hash], cwd=self.repo_path)
+        if res.success:
+            return True, f"🎉 {t('time_machine_branch_ok', branch=branch_name, commit=commit_hash)}"
+        return False, f"❌ {res.stderr or res.stdout}"
+
     def get_discardable_files(self) -> List[Dict[str, str]]:
         """获取所有可丢弃改动的文件清单及状态 (用于序号选择丢弃)"""
         info = self.get_info()

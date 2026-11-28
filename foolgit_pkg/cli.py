@@ -95,6 +95,7 @@ class FoolGitCLI:
     def _run_single_repo_menu(self):
         """单仓库循环主菜单"""
         engine = GitEngine(self.target_dir)
+        self.config_mgr.add_recent_repo(engine.repo_path)
         while True:
             info = engine.get_info()
 
@@ -132,6 +133,7 @@ class FoolGitCLI:
                 print(f"     {c(item['desc'], GRAY)}")
 
             print(f"\n {c('----------------------------------------------------', GRAY)}")
+            print(f" {c('[r]', BOLD + CYAN)} {BOLD}{t('recent_repos_opt').replace('[r] ', '')}{RESET}")
             print(f" {c('[+]', BOLD + YELLOW)} {BOLD}{t('settings_title')}{RESET}")
             print(f" {c('[q]', BOLD + RED)} {BOLD}{t('menu_quit')}{RESET}")
             print()
@@ -144,6 +146,13 @@ class FoolGitCLI:
 
             if choice == "":
                 choice = "1"
+
+            if choice.lower() == "r":
+                switched = self._menu_recent_repos()
+                if switched:
+                    engine = GitEngine(self.target_dir)
+                    self.config_mgr.add_recent_repo(engine.repo_path)
+                continue
 
             if choice == "+":
                 self._menu_manage_features()
@@ -507,6 +516,18 @@ class FoolGitCLI:
             print(c(f"─── {t('history_commit_detail_title', commit=target_hash)} ───", BOLD + CYAN))
             detail = engine.get_commit_detail(target_hash)
             print(detail)
+            print()
+            act = input(f"{BOLD}{t('history_cli_action_prompt')}{RESET}").strip().lower()
+            if act == "r":
+                conf = input(c(t("time_machine_revert_confirm", commit=target_hash) + " (y/n): ", YELLOW)).strip().lower()
+                if conf == "y":
+                    ok, msg = engine.revert_commit(target_hash)
+                    print(c(msg, GREEN if ok else RED))
+            elif act == "b":
+                bname = input(t("time_machine_branch_prompt", commit=target_hash)).strip()
+                if bname:
+                    ok, msg = engine.create_branch_at_commit(target_hash, bname)
+                    print(c(msg, GREEN if ok else RED))
 
         prompt_press_enter()
 
@@ -680,6 +701,24 @@ class FoolGitCLI:
     # ─────────────────────────────────────────────────────────
     # 设置菜单
     # ─────────────────────────────────────────────────────────
+
+    def _menu_recent_repos(self) -> bool:
+        """查看并切换到最近打开的 Git 仓库"""
+        repos = self.config_mgr.get_recent_repos()
+        print()
+        print(c(f"📂 {t('recent_repos_title')}", BOLD + CYAN))
+        if not repos:
+            print(c(t("recent_repos_empty"), YELLOW))
+            prompt_press_enter()
+            return False
+        for idx, rp in enumerate(repos, start=1):
+            print(f"  [{idx}] {BOLD}{Path(rp).name}{RESET}  {c(rp, DIM)}")
+        print()
+        sel = input(f"{BOLD}{t('recent_repos_prompt')}{RESET}").strip()
+        if sel.isdigit() and 1 <= int(sel) <= len(repos):
+            self.target_dir = repos[int(sel) - 1]
+            return True
+        return False
 
     def _menu_manage_features(self):
         """设置主菜单"""

@@ -15,9 +15,9 @@ from PyQt6.QtWidgets import (
     QApplication, QMainWindow, QWidget, QVBoxLayout, QHBoxLayout,
     QGridLayout, QLabel, QPushButton, QLineEdit, QComboBox,
     QTextEdit, QFrame, QDialog, QCheckBox, QMessageBox, QInputDialog,
-    QScrollArea, QListWidget, QListWidgetItem, QGraphicsDropShadowEffect, QFileDialog
+    QScrollArea, QListWidget, QListWidgetItem, QGraphicsDropShadowEffect, QFileDialog, QMenu
 )
-from PyQt6.QtCore import Qt, QThread, pyqtSignal
+from PyQt6.QtCore import Qt, QThread, pyqtSignal, QTimer
 from PyQt6.QtGui import QFont, QColor, QIcon, QPixmap, QPainter
 
 from .core import GitEngine, is_git_repo, run_git, scan_multi_repos
@@ -258,8 +258,10 @@ class FoolGitMainWindow(QMainWindow):
             self._handle_non_git_repo()
 
         self._setup_ui()
+        self.config_mgr.add_recent_repo(self.engine.repo_path)
         self.refresh_status()
         self._render_quick_actions()
+        QTimer.singleShot(500, self._check_remote_freshness_async)
 
     def _setup_ui(self):
         """构建整体界面布局"""
@@ -437,6 +439,11 @@ class FoolGitMainWindow(QMainWindow):
         self.btn_sync.clicked.connect(self._action_sync)
         sync_layout.addWidget(self.btn_sync)
 
+        self.lbl_sync_preview = QLabel("")
+        self.lbl_sync_preview.setProperty("class", "Muted")
+        self.lbl_sync_preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        sync_layout.addWidget(self.lbl_sync_preview)
+
         root_layout.addWidget(sync_card)
 
         # ─────────────────────────────────────────────────────
@@ -597,6 +604,7 @@ class FoolGitMainWindow(QMainWindow):
                 status_text += " (✓)"
 
         self.lbl_status_pill.setText(status_text)
+        self.lbl_sync_preview.setText(self.engine.get_sync_preview())
 
         # 检测合并冲突并显示/隐藏急救横幅
         conflicts = self.engine.get_conflict_files()
@@ -663,19 +671,59 @@ class FoolGitMainWindow(QMainWindow):
         self.txt_commit.setText(msg)
         self.txt_commit.setFocus()
 
-    def _action_switch_repo(self):
-        """在界面内直接切换工作的 Git 仓库目录"""
-        chosen_dir = QFileDialog.getExistingDirectory(
-            self, t("gui_switch_repo_btn"), str(Path(self.target_dir).resolve())
-        )
-        if not chosen_dir:
-            return
+    def _switch_to_repo_path(self, chosen_dir: str):
+        """切换到指定 Git 仓库目录并记录到最近列表"""
         self.target_dir = chosen_dir
         if not is_git_repo(self.target_dir):
             self._handle_non_git_repo()
         self.engine = GitEngine(self.target_dir)
+        self.config_mgr.add_recent_repo(self.engine.repo_path)
         self.refresh_status()
         self.log(f"> 📁 {self.engine.repo_path}")
+        QTimer.singleShot(200, self._check_remote_freshness_async)
+
+    def _action_switch_repo(self):
+        """弹出最近仓库快速切换菜单 + 浏览文件夹"""
+        recent = self.config_mgr.get_recent_repos()
+        menu = QMenu(self)
+        menu.setStyleSheet(
+            "QMenu { background-color: #1C1D21; color: #E5E7EB; border: 1px solid #2E3038; border-radius: 6px; padding: 4px; }"
+            "QMenu::item { padding: 6px 14px; border-radius: 4px; }"
+            "QMenu::item:selected { background-color: #2A2D34; color: #10B981; }"
+        )
+        if recent:
+            header_act = menu.addAction(t("gui_recent_section"))
+            header_act.setEnabled(False)
+            for rp in recent:
+                label = f"📁  {Path(rp).name}  ({rp})"
+                act = menu.addAction(label)
+                act.triggered.connect(lambda _checked=False, p=rp: self._switch_to_repo_path(p))
+            menu.addSeparator()
+
+        browse_act = menu.addAction("🔍  " + t("gui_browse_folder"))
+        def do_browse():
+            chosen_dir = QFileDialog.getExistingDirectory(
+                self, t("gui_switch_repo_btn"), str(Path(self.target_dir).resolve())
+            )
+            if chosen_dir:
+                self._switch_to_repo_path(chosen_dir)
+        browse_act.triggered.connect(do_browse)
+        menu.exec(self.btn_switch_repo.mapToGlobal(self.btn_switch_repo.rect().bottomLeft()))
+
+    def _check_remote_freshness_async(self):
+        """后台非阻塞检查远端是否有新提交"""
+        def fetch_job():
+            ok, behind = self.engine.fetch_remote_status()
+            return ok, [str(behind)]
+
+        self._fetch_worker = GitTaskThread(fetch_job)
+
+        def on_fetch_done(ok, _logs):
+            if ok:
+                self.refresh_status()
+
+        self._fetch_worker.finished_signal.connect(on_fetch_done)
+        self._fetch_worker.start()
 
     def _action_open_web(self):
         """在默认浏览器中打开远程仓库网页"""
@@ -1626,6 +1674,54 @@ class FoolGitMainWindow(QMainWindow):
         list_commits.itemSelectionChanged.connect(on_commit_selected)
         if list_commits.count() > 0:
             list_commits.setCurrentRow(0)
+
+        tm_row = QHBoxLayout()
+        btn_branch_here = QPushButton(t("time_machine_branch_btn"))
+        btn_branch_here.setCursor(Qt.CursorShape.PointingHandCursor)
+        tm_row.addWidget(btn_branch_here)
+
+        btn_revert_commit = QPushButton(t("time_machine_revert_btn"))
+        btn_revert_commit.setObjectName("UndoButton")
+        btn_revert_commit.setCursor(Qt.CursorShape.PointingHandCursor)
+        tm_row.addWidget(btn_revert_commit)
+        d_layout.addLayout(tm_row)
+
+        def _selected_hash() -> Optional[str]:
+            curr = list_commits.currentItem()
+            return commit_map.get(curr.text()) if curr else None
+
+        def do_branch_here():
+            h = _selected_hash()
+            if not h:
+                return
+            bname, ok_in = QInputDialog.getText(
+                dialog, t("gui_history_viewer"), t("time_machine_branch_prompt", commit=h)
+            )
+            if ok_in and bname.strip():
+                ok, msg = self.engine.create_branch_at_commit(h, bname.strip())
+                self.log(f"> {msg}")
+                self.refresh_status()
+                if ok:
+                    dialog.accept()
+
+        def do_revert_commit():
+            h = _selected_hash()
+            if not h:
+                return
+            reply = QMessageBox.question(
+                dialog, t("gui_history_viewer"),
+                t("time_machine_revert_confirm", commit=h),
+                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
+            )
+            if reply == QMessageBox.StandardButton.Yes:
+                ok, msg = self.engine.revert_commit(h)
+                self.log(f"> {msg}")
+                self.refresh_status()
+                if ok:
+                    dialog.accept()
+
+        btn_branch_here.clicked.connect(do_branch_here)
+        btn_revert_commit.clicked.connect(do_revert_commit)
 
         dialog.exec()
 

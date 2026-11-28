@@ -71,22 +71,17 @@
 
 > **Goal for Next Iteration**: Combine Lazygit's *instantaneous project flow* with FoolGit's *zero-friction safety*, without adding a single complex pane.
 
-### Phase 5 — Zero-Friction Daily Flow (Next Sprint 🎯)
-1. **Recent Repositories History (`recent_repos` in `config.json`)**
-   - *Why*: Lazygit's `recent repos` makes multi-project switching effortless. Right now FoolGit GUI requires browsing folders every time.
-   - *Spec*: Persist the last 5–8 opened repo paths in `ConfigManager`; add a quick dropdown/submenu in GUI (`Switch Repo` menu) and CLI (`[r] Recent Repos`).
-2. **Pre-Sync Action Preview Pill ("What will happen?")**
-   - *Why*: Builds trust without SmartGit's noisy staging pane.
-   - *Spec*: Display a subtle 1-line summary under the Sync button (e.g. `Will pull origin/main → commit 3 files → push` or `Nothing to commit · Up to date`).
-3. **CLI One-Shot Fast Subcommands (`./foolgit sync`, `./foolgit s`, `./foolgit gui`)**
-   - *Why*: Power users occasionally want `./foolgit sync "fix typo"` without entering the interactive menu, while keeping `./foolgit` interactive by default.
-   - *Spec*: Extend `cli_entry.py` with optional `sync [msg]`, `pull`, `status`/`s`, `gui` subcommands while preserving < 0.2s startup.
-4. **Non-Blocking Remote Freshness Check (`git fetch --dry-run` / lightweight check)**
-   - *Why*: Warn users *before* they edit stale code (`↓ 2 updates waiting on remote`), without blocking UI startup.
-   - *Spec*: Optional background check on GUI launch / refresh button.
-5. **Safe "Time Machine" Restore Point (Revert / Checkout Commit safely)**
-   - *Why*: Beginners often ask "How do I go back to yesterday's version?" without understanding `git revert` vs `git reset --hard`.
-   - *Spec*: In History Viewer, add a plain `"Restore a copy of this commit"` (`git revert` or create branch at commit) option with clear non-destructive explanation.
+### Phase 5 — Zero-Friction Daily Flow (Completed ✅)
+1. [x] **Recent Repositories History (`recent_repos` in `config.json`)**
+   - Persist last 8 opened repo paths in `ConfigManager`; quick dropdown menu in GUI (`📁 Switch Repo`) and `[r] Recent Repositories` in CLI.
+2. [x] **Pre-Sync Action Preview Pill ("What will happen?")**
+   - Subtle 1-line summary under the Sync button (`get_sync_preview()`) showing exact steps (`Pull → Commit N file(s) → Push` or `Working tree clean`).
+3. [x] **CLI One-Shot Fast Subcommands (`./foolgit sync`, `./foolgit s`, `./foolgit pull`, `./foolgit gui`)**
+   - Instant scriptable CLI subcommands while keeping `./foolgit` interactive by default.
+4. [x] **Non-Blocking Remote Freshness Check (`fetch_remote_status`)**
+   - Background `git fetch origin --quiet` check on GUI launch / repo switch without blocking UI.
+5. [x] **Safe "Time Machine" Restore Point**
+   - In History Viewer (GUI & CLI), `"Branch from Here (Safe Copy)"` (`create_branch_at_commit`) and `"Revert This Commit (Safe Undo)"` (`revert_commit`).
 
 ### Phase 6 — Collaboration & Distribution (Future)
 1. **One-Click Pull Request / Compare Link**
