@@ -1,4 +1,4 @@
-# FoolGit Product Strategy, Competitive Differentiation & Roadmap
+# FoolGit Product Strategy, Software Engineering Analysis & Roadmap
 
 > **Core Positioning**: Compete with both **heavy enterprise GUIs** (SmartGit, SourceTree, GitKraken) and **hotkey-dense TUIs** (Lazygit, gitui) by doing the **exact opposite** — **radical simplicity, zero Git jargon, 1-click daily workflow, and built-in safety guardrails**.
 
@@ -10,83 +10,93 @@
 | :--- | :--- | :--- | :--- |
 | **Target User** | Vim/Neovim power users who already master Git internals | Enterprise release managers & full-time Git admins | **Everyday devs, AI/vibe-coders, students, researchers, beginners** |
 | **Learning Curve** | **High** — 50+ single-letter hotkeys across 5 split panes (`a`, `c`, `P`, `x`, `s`, `r`...) | **High** — 40+ toolbar buttons, 6 docked panels, deep right-click menus | **Near Zero** — 1 Hero Action + 5–6 essential cards; numbered CLI (`[1..6]`) |
-| **Git Jargon** | Exposes raw Git (`Stage`, `Hunk`, `Rebase`, `Squash`, `Fixup`, `Reflog`) | Exposes raw Git (`Index`, `HEAD`, `Fast-forward`, `Cherry-pick`, `Submodule`) | **Zero Jargon** — "Save & Sync", "Undo / Restore", "Keep My Version / Use Remote" |
+| **Git Jargon** | Exposes raw Git (`Stage`, `Hunk`, `Rebase`, `Squash`, `Fixup`, `Reflog`) | Exposes raw Git (`Index`, `HEAD`, `Fast-forward`, `Cherry-pick`, `Submodule`) | **Zero Jargon** — "Cloud Save", "Undo Pills", "Temporary Locker", "Parallel Worlds", "Time Machine" |
 | **Daily Save Flow** | Multi-step (`Space` stage → `c` commit → `p` pull → `P` push) | Multi-step (`Stage All` → `Commit` → `Pull` → `Push`) | **1-Click Pipeline** (`Pull → Add → Smart Commit → Push`) |
 | **Safety Guardrails** | Minimal — easy to trigger destructive reset/rebase with one wrong key | Weak defaults — easy to commit `.env` / large binaries or get stuck in detached HEAD | **Built-in Guardrails** — warns on large files (`>=10 MB`), `.env`/keys, detached HEAD + 1-click `.gitignore` |
 | **Conflict Handling** | Manual hunk/line editor inside TUI | Complex 3-way merge viewer | **3-Button Rescue** — "Keep My Version", "Use Remote Version", or "Abort Merge" |
 | **Startup & Footprint** | Fast Go binary (~10ms), terminal-only | Heavy Java JVM / Electron (slow startup, high RAM) | **< 0.2s CLI startup** (`porcelain=v2` single-call) + lightweight dark PyQt6 GUI |
 | **Bilingual Purity** | English-centric / partial community translations | English-centric / cluttered menus | **100% Pure EN / ZH** hot-switchable, zero mixed-language strings |
 
-### Key Strategic Insight
-- **Lazygit wins on speed**, but loses 80% of developers because it requires memorizing TUI keybindings and Git internals.
-- **SmartGit wins on completeness**, but loses 90% of users to cognitive overload and multi-step friction.
-- **FoolGit wins the underserved majority**: people who want **Git to behave like Cloud Save with a Safety Net** — fast like a CLI tool, clean like a modern dark app, and safe enough that you can't accidentally break your repo.
-
 ---
 
 ## 2. Core Design Principles
 
-1. **Choose, Don't Type (能点选，不打字)**
-   - Numbered menus in CLI; clickable cards, commit chips, and lists in GUI.
-2. **Progressive Disclosure (渐进式暴露)**
-   - Factory default = **6 essential actions** (`sync`, `pull`, `status`, `undo`, `branch`, `stash`).
-   - Power features (`history`, `diff`, `clean`, `tag`, `remote`, `multi_sync`, `gitignore`) live in the Feature Library (`Settings`) and are opt-in.
-3. **100% Pure Bilingual Separation (纯净双语)**
-   - English (default) and Simplified Chinese (`zh`), switchable on the fly, zero mixed-language strings.
-4. **Safety First (防呆护栏)**
-   - Never silently destroy uncommitted work.
-   - Warn before committing sensitive/large files or on detached HEAD.
-   - Surface merge conflicts immediately with plain recovery actions.
-5. **Programmer-Grade Minimalism (极简暗黑美学)**
-   - Dark charcoal palette (`#121316` / `#1C1D21`), emerald primary (`#10B981`), crimson danger (`#EF4444`), zero visual clutter.
+1. **Choose, Don't Type (能点选，不打字)** — Numbered menus in CLI; clickable cards, commit chips, and lists in GUI.
+2. **Progressive Disclosure (渐进式暴露)** — Factory default = **6 essential actions** (`sync`, `pull`, `status`, `undo`, `branch`, `stash`); extra tools stay in Settings until enabled.
+3. **Concrete Human Metaphors (超具象人话隐喻)** — *Undo Pills* (后悔药), *Temporary Locker* (临时储物柜), *Parallel Worlds* (平行宇宙), *Time Machine* (时光机).
+4. **100% Pure Bilingual Separation (纯净双语)** — English (default) and Simplified Chinese (`zh`), zero mixed-language strings.
+5. **Safety First (防呆护栏)** — Never silently destroy uncommitted work; warn on sensitive/large files; surface merge conflicts with plain recovery choices.
 
 ---
 
-## 3. Completed Milestones (Phases 1–4)
+## 3. Software Engineering & Architecture Analysis
 
-### Phase 1 — Core Simplicity & Purity ✅
-- [x] `GitEngine` decoupled from UI (`porcelain=v2` fast status, < 0.2s CLI startup)
-- [x] Factory 6-preset default + Feature Library toggle + Custom Git commands
-- [x] 100% pure EN/ZH `i18n.py` + persistent `.foolgit/config.json`
-- [x] Dark PyQt6 GUI with zero font-alias warnings & live language switching
+### 3.1 Current Codebase Architecture (~4,834 LOC)
 
-### Phase 2 — Full Preset Parity & Daily Ergonomics ✅
-- [x] Dedicated dark dialogs for Undo (per-file discard, uncommit, amend), Stash (list/apply/drop), Clean (preview), Tag, Remote, Diff (color-coded), History (click-to-inspect), Branch Manager, `.gitignore` Editor, and Multi-Repo Batch Sync.
-- [x] Conventional Commit quick chips (`feat:`, `fix:`, `docs:`, `chore:`, `refactor:`).
+```text
+foolgit_pkg/
+├── __init__.py     (5 LOC)    Package metadata
+├── presets.py      (34 LOC)   Official 6-default + 7-extra preset registry
+├── cli_entry.py    (87 LOC)   Fast CLI entrypoint + one-shot subcommands (sync/pull/s/gui)
+├── config.py       (193 LOC)  JSON persistence (~/.foolgit/config.json), recent_repos, presets
+├── core.py         (745 LOC)  Decoupled GitEngine (porcelain=v2, safety checks, Time Machine)
+├── i18n.py         (846 LOC)  338-key pure EN/ZH translation dictionary
+├── cli.py          (975 LOC)  Interactive numbered-menu CLI + concrete metaphors
+└── gui.py          (1,949 LOC) PyQt6 dark desktop UI + 10+ modal dialogs
+```
 
-### Phase 3 — Anti-SmartGit Safety & Intelligence ✅
-- [x] **Smart Commit Message Generator**: Auto-summarize changed files (`update: 3 files (gui.py, core.py, +1 more)`) + `✨ Auto` chip in GUI.
-- [x] **Pre-Sync Risk Guardrails**: Detect large files (`>=10 MB`), sensitive/junk files (`.env`, `.pem`, `.key`, `.DS_Store`), and detached HEAD before committing, with 1-click "Add Sensitive Files to .gitignore & Sync".
-- [x] **Zero-Jargon Conflict Rescue**: Per-file "Keep My Version" (`--ours`) and "Use Remote Version" (`--theirs`) + "Abort Merge" in both CLI and GUI.
-- [x] **Quick Repo Switcher & Short Commit Hash**: Switch folder directly in GUI header; show `repo · 7-char-oid`.
+### 3.2 Engineering Quality Assessment (SDLC Stages)
 
-### Phase 4 — Visual Polish & Ergonomics ✅
-- [x] **Minimalist Timeline**: 1-column commit dot (`●`) + branch/tag decoration in History Viewer.
-- [x] **One-Click Web Link**: Convert `origin` SSH/HTTPS URL and open repository in browser (`🌐 Open Web`).
-- [x] **Keyboard & Async Ergonomics**: Press `Enter` in commit field to sync, busy-state button lock, 100% localized non-Git init prompt.
+| SDLC Stage | Current Maturity | Observations |
+| :--- | :--- | :--- |
+| **Requirements & Domain Model** | **Strong** | Clear Anti-SmartGit / Anti-Lazygit positioning; concrete user-facing metaphors aligned across core, CLI, and i18n. |
+| **Architecture & Decoupling** | **Good (CLI/Core), Needs Refactor (GUI)** | `GitEngine` (`core.py`) is cleanly decoupled from `cli.py` and `gui.py`. However, `gui.py` (1,949 LOC) is monolithic. |
+| **Reliability & Edge Cases** | **Moderate** | Works smoothly on happy paths, but lacks subprocess timeouts, `GIT_TERMINAL_PROMPT=0`, Git identity onboarding, and `porcelain=v2` `u` (unmerged) / `2` (rename) edge-case handling. |
+| **Testing & QA Automation** | **Weak (Gap)** | **No `tests/` directory or `make test` target**; verification relies on ad-hoc scripts. |
+| **Packaging & Distribution** | **Moderate** | Fast Python CLI launcher (`./foolgit`, ~0.17s) works well; GUI requires matching PyQt6 Python env; macOS `.app` / Homebrew tap not yet finalized. |
 
 ---
 
-## 4. Next-Iteration Development Roadmap (Phases 5–6)
+## 4. Identified Gaps & Technical Debt (Actionable Audit)
 
-> **Goal for Next Iteration**: Combine Lazygit's *instantaneous project flow* with FoolGit's *zero-friction safety*, without adding a single complex pane.
+> Concrete weaknesses found in the current codebase to guide the next engineering sprint:
 
-### Phase 5 — Zero-Friction Daily Flow (Completed ✅)
-1. [x] **Recent Repositories History (`recent_repos` in `config.json`)**
-   - Persist last 8 opened repo paths in `ConfigManager`; quick dropdown menu in GUI (`📁 Switch Repo`) and `[r] Recent Repositories` in CLI.
-2. [x] **Pre-Sync Action Preview Pill ("What will happen?")**
-   - Subtle 1-line summary under the Sync button (`get_sync_preview()`) showing exact steps (`Pull → Commit N file(s) → Push` or `Working tree clean`).
-3. [x] **CLI One-Shot Fast Subcommands (`./foolgit sync`, `./foolgit s`, `./foolgit pull`, `./foolgit gui`)**
-   - Instant scriptable CLI subcommands while keeping `./foolgit` interactive by default.
-4. [x] **Non-Blocking Remote Freshness Check (`fetch_remote_status`)**
-   - Background `git fetch origin --quiet` check on GUI launch / repo switch without blocking UI.
-5. [x] **Safe "Time Machine" Restore Point**
-   - In History Viewer (GUI & CLI), `"Branch from Here (Safe Copy)"` (`create_branch_at_commit`) and `"Revert This Commit (Safe Undo)"` (`revert_commit`).
+### A. Reliability & Git Edge-Case Gaps (`core.py` / `cli.py`)
+1. **No Subprocess Timeout / Non-Interactive Guard**: `run_git()` has no `timeout` and does not set `GIT_TERMINAL_PROMPT=0` — broken SSH/HTTPS auth or slow networks can hang the CLI/GUI indefinitely.
+2. **Missing First-Run Git Identity Check**: If a beginner has never run `git config user.name` / `user.email`, `one_click_sync` fails with a cryptic `Author identity unknown` error instead of guiding them to set their name & email once.
+3. **Pull Blocked by Local Edits**: When `safe_pull()` fails because local modified files would be overwritten, beginners are stuck. We need an **"Auto-Locker Pull"** flow (automatically lock WIP → Pull → restore WIP).
+4. **Custom Command Argument Splitting**: `cli.py` (and `gui.py`) parses custom commands with `.replace("git ", "").split()`, which breaks quoted arguments like `git commit -m "hello world"` (`shlex.split` needed).
+5. **`porcelain=v2` Unmerged (`u `) & Rename (`2 `) Lines**: `get_info()` does not count `u ` (unmerged conflict) lines in `total_changes` and does not split `\t` on `2 ` rename entries.
 
-### Phase 6 — Collaboration & Distribution (Future)
-1. **One-Click Pull Request / Compare Link**
-   - When on a non-default branch (e.g. `feat-login` != `main`/`master`), offer `"🔀 Create PR in Browser"` (`https://github.com/user/repo/compare/feat-login?expand=1`).
-2. **macOS `.app` Bundle & Homebrew Tap**
-   - Package cleanly (`--onedir` + `.app` wrapper / Homebrew formula) so non-technical users can install via `brew install foolgit` without Gatekeeper `--onefile` lag.
-3. **Automated Test Suite (`pytest` / `unittest`)**
-   - Formalize the temporary-repo integration tests and i18n parity checks into `tests/` with `make test` so every future PR/commit stays regression-free.
+### B. i18n Purity Gaps (`cli.py` / `cli_entry.py`)
+1. **Remaining Hardcoded English**: `cli.py` lines ~887–904 (`Init failed`, `Cloning ...`, `No Git repositories found.`, `Select option:`, `Number [b to return]:`) and `cli_entry.py` (`Current directory is not a Git repository.`) are not yet wrapped in `t()`.
+
+### C. Testing & Maintainability Gaps
+1. **No Automated Test Suite (`tests/`)**: Need `unittest` / `pytest` covering `core.py` (temp-repo workflows), `config.py`, `i18n.py` (EN/ZH key parity + no hardcoded leak checks), and `cli_entry.py` one-shot commands.
+2. **Monolithic `gui.py` (1,949 LOC)**: Before the upcoming **GUI Beautification** sprint, `gui.py` should be split into `gui/theme.py`, `gui/dialogs.py`, and `gui/main_window.py`.
+
+---
+
+## 5. Completed Milestones (Phases 1–5) ✅
+
+- **Phase 1**: Core engine (`porcelain=v2`), 6-preset default + Feature Library, 100% pure EN/ZH `i18n.py`, dark PyQt6 GUI.
+- **Phase 2**: Full preset parity across CLI & GUI (Undo, Stash, Clean, Tag, Remote, Diff, History, Branch, `.gitignore`, Multi-Repo).
+- **Phase 3**: Smart commit summary (`✨ Auto`), pre-sync risk guardrails (`>=10 MB`, `.env`/keys, detached HEAD), zero-jargon Conflict Rescue (`Keep My Version` / `Use Remote Version` / `Abort`).
+- **Phase 4**: One-click Open Web (`🌐`), Enter-to-sync, busy-state lock, decorated history timeline.
+- **Phase 5**: `recent_repos` history, sync action preview (`get_sync_preview`), CLI one-shot subcommands (`sync`, `pull`, `s`, `gui`), async remote fetch, Time Machine (`revert_commit` / `create_branch_at_commit`), and concrete beginner metaphors (*Undo Pills*, *Temporary Locker*, *Parallel Worlds*, *Time Machine*).
+
+---
+
+## 6. Next-Iteration Development Backlog (Prioritized)
+
+### Sprint A — CLI & Core Hardening (Next Task 🎯)
+1. **Subprocess Safety (`core.py`)**: Add configurable `timeout` (e.g., 30s for local, 60s for network) + `GIT_TERMINAL_PROMPT=0` env to prevent hangs; fix `porcelain=v2` `u ` & `2 ` parsing; use `shlex.split()` for custom commands.
+2. **First-Run Identity Onboarding (`core.py` + `cli.py`)**: Detect missing `user.name`/`user.email` before commit and offer a 2-question plain-language setup.
+3. **Auto-Locker Pull Rescue (`core.py` + `cli.py`)**: When `safe_pull()` is blocked by local edits, offer 1-key **"Lock WIP → Pull → Restore WIP"**.
+4. **100% i18n Cleanup (`cli.py` + `cli_entry.py`)**: Replace every remaining hardcoded English string in non-git, multi-repo, and one-shot CLI paths with `t()`.
+5. **Automated Test Suite (`tests/` + `Makefile`)**: Add `make test` running unit + temp-repo integration tests for `core.py`, `config.py`, `i18n.py`, and `cli_entry.py`.
+
+### Sprint B — GUI Modularization & Beautification (Following Sprint 🎨)
+1. **Modularize `gui.py`** into `foolgit_pkg/gui/` (`theme.py`, `widgets.py`, `dialogs.py`, `window.py`).
+2. **Visual Polish**: Refined spacing, custom SVG/QIcon action badges, unified status cards matching the new CLI metaphors (*Undo Pills*, *Temporary Locker*, *Parallel Worlds*, *Time Machine*), and smooth progress feedback.
+3. **Distribution**: One-click PR/Compare link (`🔀 Create PR`), macOS `.app` (`--onedir`), and Homebrew formula.
