@@ -5,6 +5,7 @@ FoolGit 终端交互 UI (CLI)
 
 import os
 import sys
+import webbrowser
 from pathlib import Path
 from typing import List, Dict, Any, Optional
 
@@ -67,6 +68,7 @@ class FoolGitCLI:
         print()
         repo_name = info["name"]
         branch = info["branch"]
+        oid_suffix = f" · {info['commit_oid']}" if info.get("commit_oid") else ""
         clean_status = c(t("clean_status"), GREEN) if info["is_clean"] else c(t("dirty_status", count=info["total_changes"]), YELLOW)
 
         sync_status = ""
@@ -83,13 +85,16 @@ class FoolGitCLI:
             sync_status = c(t("no_upstream"), GRAY)
 
         title_text = t("app_title")
-        print(c("┏" + "━" * 60 + "┓", CYAN))
-        print(c("┃", CYAN) + f"  {BOLD}{title_text}{RESET}".ljust(68) + c("┃", CYAN))
-        header_line = f"  📁 {t('repo_label')}: {c(repo_name, BOLD)}   🌿 {t('branch_label')}: {c(branch, GREEN)}"
-        print(c("┃", CYAN) + header_line.ljust(68) + c("┃", CYAN))
+        print(c("┏" + "━" * 62 + "┓", CYAN))
+        print(c("┃", CYAN) + f"  {BOLD}{title_text}{RESET}".ljust(70) + c("┃", CYAN))
+        header_line = f"  📁 {t('repo_label')}: {c(repo_name, BOLD)}   🌿 {t('branch_label')}: {c(branch + oid_suffix, GREEN)}"
+        print(c("┃", CYAN) + header_line.ljust(70) + c("┃", CYAN))
         status_line = f"  ⚡ {t('status_label')}: {clean_status}{sync_status}"
-        print(c("┃", CYAN) + status_line.ljust(76) + c("┃", CYAN))
-        print(c("┗" + "━" * 60 + "┛", CYAN))
+        print(c("┃", CYAN) + status_line.ljust(78) + c("┃", CYAN))
+        print(c("┗" + "━" * 62 + "┛", CYAN))
+        conflicts = info.get("conflicts") or []
+        if conflicts:
+            print(f" {c('🚑 ' + t('conflict_banner_cli', count=len(conflicts)), BOLD + RED)}")
         print()
 
     def _run_single_repo_menu(self):
@@ -134,6 +139,8 @@ class FoolGitCLI:
                 print(f"     {c(item['desc'], GRAY)}")
 
             print(f"\n {c('----------------------------------------------------', GRAY)}")
+            if info.get("conflicts"):
+                print(f" {c('[!]', BOLD + RED)} {BOLD}{t('conflict_banner_cli', count=len(info['conflicts']))}{RESET}")
             print(f" {c('[r]', BOLD + CYAN)} {BOLD}{t('recent_repos_opt').replace('[r] ', '')}{RESET}")
             print(f" {c('[+]', BOLD + YELLOW)} {BOLD}{t('settings_title')}{RESET}")
             print(f" {c('[q]', BOLD + RED)} {BOLD}{t('menu_quit')}{RESET}")
@@ -147,6 +154,11 @@ class FoolGitCLI:
 
             if choice == "":
                 choice = "1"
+
+            if choice == "!":
+                self._run_conflict_rescue(engine)
+                prompt_press_enter()
+                continue
 
             if choice.lower() == "r":
                 switched = self._menu_recent_repos()
@@ -264,13 +276,34 @@ class FoolGitCLI:
             if risks["large_files"]:
                 lf_str = ", ".join(f"{name} ({mb}MB)" for name, mb in risks["large_files"])
                 print(f"  • {c(t('risk_large_files'), YELLOW)} {lf_str}")
-            ans = input(f"\n{BOLD}{t('risk_continue_prompt')}{RESET}").strip().lower()
-            if ans != "y":
-                print(c(t("cancelled"), YELLOW))
-                prompt_press_enter()
-                return
 
+            if risks["sensitive_files"] and not risks["detached_head"]:
+                ans = input(f"\n{BOLD}{t('risk_ignore_continue_prompt')}{RESET}").strip().lower()
+                if ans == "i":
+                    for sf in risks["sensitive_files"]:
+                        _, ign_msg = engine.append_to_gitignore(sf)
+                        print(f"  {c(ign_msg, GREEN)}")
+                elif ans != "y":
+                    print(c(t("cancelled"), YELLOW))
+                    prompt_press_enter()
+                    return
+            else:
+                ans = input(f"\n{BOLD}{t('risk_continue_prompt')}{RESET}").strip().lower()
+                if ans != "y":
+                    print(c(t("cancelled"), YELLOW))
+                    prompt_press_enter()
+                    return
+
+        smart_default = engine.generate_smart_commit_msg()
+        print(f"✨ {c(t('commit_smart_hint', msg=smart_default), DIM)}")
+        print(f"🏷️  {c(t('commit_prefix_hint'), DIM)}")
         custom_msg = input(f"{BOLD}{t('commit_prompt')}{RESET}").strip()
+
+        prefix_map = {"1": "feat:", "2": "fix:", "3": "docs:", "4": "chore:"}
+        if custom_msg in prefix_map:
+            chosen_prefix = prefix_map[custom_msg]
+            rest = input(f"{BOLD}{t('commit_prefix_note_prompt', prefix=chosen_prefix)}{RESET}").strip()
+            custom_msg = f"{chosen_prefix} {rest}" if rest else f"{chosen_prefix} {smart_default.replace('update: ', '')}"
 
         print(f"\n{t('syncing')}")
         success, logs = engine.one_click_sync(custom_msg if custom_msg else None)
@@ -286,7 +319,47 @@ class FoolGitCLI:
             else:
                 print(c(log, CYAN))
 
+        if success:
+            pr_url = engine.get_pr_compare_url()
+            if pr_url:
+                print(f"\n{c(t('pr_available_hint', url=pr_url), CYAN)}")
+                if input(f"{BOLD}{t('pr_open_prompt')}{RESET}").strip().lower() == "y":
+                    webbrowser.open(pr_url)
+
         prompt_press_enter()
+
+    def _run_conflict_rescue(self, engine: GitEngine):
+        """通用零术语冲突急救交互（保留本地 / 使用远程 / 中止合并）"""
+        while True:
+            conflicts = engine.get_conflict_files()
+            if not conflicts:
+                break
+            print()
+            print(c(f"🚑 {t('conflict_title')}", BOLD + RED))
+            print(t("conflict_files_status"))
+            for idx, cf in enumerate(conflicts, start=1):
+                print(f"  [{idx}] {c('!', RED)} {cf}")
+            print()
+            print(f" {t('conflict_opt_ours')}")
+            print(f" {t('conflict_opt_theirs')}")
+            print(f" {t('conflict_opt_abort')}")
+            print(f" {t('conflict_opt_back')}")
+            ans = input(f"{BOLD}{t('conflict_prompt')}{RESET}").strip().lower()
+            if ans in ("b", ""):
+                break
+            elif ans == "a":
+                ab_ok, ab_msg = engine.abort_merge()
+                print(c(ab_msg, GREEN if ab_ok else RED))
+                break
+            elif ans in ("m", "r"):
+                sel = input(f"{BOLD}{t('conflict_select_file_prompt')}{RESET}").strip()
+                if sel.isdigit() and 1 <= int(sel) <= len(conflicts):
+                    target_cf = conflicts[int(sel) - 1]
+                    strat = "ours" if ans == "m" else "theirs"
+                    r_ok, r_msg = engine.resolve_conflict(target_cf, strat)
+                    print(c(r_msg, GREEN if r_ok else RED))
+                else:
+                    print(c(t("invalid_choice"), RED))
 
     def _action_pull(self, engine: GitEngine):
         """拉取最新代码"""
@@ -302,41 +375,10 @@ class FoolGitCLI:
                 print(c(f"🔒 {t('pull_blocked_local')}", YELLOW))
                 lock_ans = input(f"{BOLD}{t('pull_auto_locker_prompt')}{RESET}").strip().lower()
                 if lock_ans == "l":
-                    al_ok, al_logs = engine.auto_locker_pull()
+                    _, al_logs = engine.auto_locker_pull()
                     for al in al_logs:
                         print(f"  {al}")
-                    if not al_ok and engine.get_conflict_files():
-                        msg = al_logs[-1]
-            while True:
-                conflicts = engine.get_conflict_files()
-                if not conflicts:
-                    break
-                print()
-                print(c(f"🚑 {t('conflict_title')}", BOLD + RED))
-                print(t("conflict_files_label"))
-                for idx, cf in enumerate(conflicts, start=1):
-                    print(f"  [{idx}] {c('!', RED)} {cf}")
-                print()
-                print(f" {t('conflict_opt_ours')}")
-                print(f" {t('conflict_opt_theirs')}")
-                print(f" {t('conflict_opt_abort')}")
-                print(f" {t('conflict_opt_back')}")
-                ans = input(f"{BOLD}{t('conflict_prompt')}{RESET}").strip().lower()
-                if ans in ("b", ""):
-                    break
-                elif ans == "a":
-                    ab_ok, ab_msg = engine.abort_merge()
-                    print(c(ab_msg, GREEN if ab_ok else RED))
-                    break
-                elif ans in ("m", "r"):
-                    sel = input(f"{BOLD}{t('conflict_select_file_prompt')}{RESET}").strip()
-                    if sel.isdigit() and 1 <= int(sel) <= len(conflicts):
-                        target_cf = conflicts[int(sel) - 1]
-                        strat = "ours" if ans == "m" else "theirs"
-                        r_ok, r_msg = engine.resolve_conflict(target_cf, strat)
-                        print(c(r_msg, GREEN if r_ok else RED))
-                    else:
-                        print(c(t("invalid_choice"), RED))
+            self._run_conflict_rescue(engine)
         prompt_press_enter()
 
     def _action_status(self, engine: GitEngine):
@@ -349,6 +391,10 @@ class FoolGitCLI:
         if info["is_clean"]:
             print(c(f"✨ {t('clean_workspace')}", GREEN))
         else:
+            if info.get("conflicts"):
+                print(c(f"● {t('conflict_files_status')}", RED))
+                for f in info["conflicts"]:
+                    print(f"  {c('!', RED)} {f}")
             if info["staged"]:
                 print(c(f"● {t('staged_files')}", GREEN))
                 for f in info["staged"]:
@@ -693,6 +739,8 @@ class FoolGitCLI:
         print(f" {t('remote_opt_view')}")
         print(f" {t('remote_opt_set')}")
         print(f" {t('remote_opt_test')}")
+        print(f" {t('remote_opt_open_web')}")
+        print(f" {t('remote_opt_open_pr')}")
         print(f" {t('back_to_main')}")
         print()
 
@@ -713,6 +761,20 @@ class FoolGitCLI:
             print(t("remote_testing"))
             ok, msg = engine.test_remote_connection()
             print(c(msg, GREEN if ok else RED))
+        elif sub == "4":
+            web_url = engine.get_remote_web_url()
+            if web_url:
+                webbrowser.open(web_url)
+                print(c(t("opened_in_browser", url=web_url), GREEN))
+            else:
+                print(c(t("gui_no_web_remote"), YELLOW))
+        elif sub == "5":
+            pr_url = engine.get_pr_compare_url()
+            if pr_url:
+                webbrowser.open(pr_url)
+                print(c(t("opened_in_browser", url=pr_url), GREEN))
+            else:
+                print(c(t("pr_not_feature_branch"), YELLOW))
         prompt_press_enter()
 
     def _action_multi_sync(self):
@@ -729,7 +791,7 @@ class FoolGitCLI:
                 for line in content.splitlines()[:30]:
                     print(f"  {c(line, DIM)}")
                 if len(content.splitlines()) > 30:
-                    print(c(f"  ... ({len(content.splitlines())} lines total)", DIM))
+                    print(c(t("history_more_lines", total=len(content.splitlines())), DIM))
             else:
                 print(c(t("gitignore_empty_file"), YELLOW))
             print()
